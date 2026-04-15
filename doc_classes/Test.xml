@@ -3,6 +3,17 @@
 	<brief_description>
 	</brief_description>
 	<description>
+	This is how you link to other classes [Node], [Object].
+		[b]This is bold text[/b]
+
+		For more information, check out the [url=https://docs.godotengine.org/en/stable/tutorials/plugins/editor/custom_editor_plugin.html]Official Documentation[/url].
+
+		Youtube Channel:
+		[url=https://www.youtube.com/@realnikich]@realNikich[/url]
+
+		Support more of my projects and tutorials here!
+		[url=https://ko-fi.com/realnikich]Ko-fi[/url]
+		[url=https://patreon.com/realnikich]Patreon[/url]
 	</description>
 	<tutorials>
 	</tutorials>

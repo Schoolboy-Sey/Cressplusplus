@@ -1,0 +1,87 @@
+Details on Scent propagation or "smellnet":
+
+We use an Active Wavefront (BFS Queue). This is a tiny, temporary list of coordinates that lives purely on the stack memory.
+
+Here is the hyper-fast C++ algorithm that runs exactly 4 times a second:
+
+// 1. Wipe the old scent in the player's chunk (Fast 16KB memory wipe)
+// 2. Add the Player's tile to a temporary "Wavefront Queue"
+// 3. Set Player's tile scent to 15
+
+int current_scent = 15;
+
+while (!wavefront_queue.empty() && current_scent > 0) {
+    
+    // Grab all tiles currently at the edge of the smell radius
+    std::vector<int> next_frontier;
+
+    for (int tile_index : wavefront_queue) {
+        
+        // Look North, South, East, West...
+        // For each neighbor, check TWO things:
+        // A) Is it passable? !(neighbor.pathing_scent & FLAG_IMPASSABLE)
+        // B) Does it currently have a lower scent? 
+        
+        if (valid_neighbor) {
+            // Write the new, decayed scent to the tile!
+            grid_array[neighbor_index].pathing_scent |= ((current_scent - 1) << 4);
+            
+            // Add it to the frontier so it can spread again next loop
+            next_frontier.push_back(neighbor_index);
+        }
+    }
+    
+    // Move the frontier outward, decay the scent power
+    wavefront_queue = next_frontier;
+    current_scent--;
+}
+
+This is done during the enemies turn when the enemy is "thinking" how to move forward. This will not be the only system in place for pathfinding, but all pathfinding will follow this scent logic. 
+
+
+Details on effect propagation
+
+1. Water flowing down a Slope (The Integer Comparison)
+To figure out if Water can flow East, the CPU does not calculate 3D vectors or run complex physics raycasts. It does a single, primitive integer comparison.
+
+C++
+// 1. Grab the current tile and the East neighbor (Zero memory cost)
+Tile current = grid_array[index];
+Tile neighbor_east = grid_array[index + 1];
+
+// 2. The Gravity Check
+// Is the neighbor's absolute_elevation equal to or lower than ours?
+if (neighbor_east.absolute_elevation <= current.absolute_elevation) {
+    
+    // 3. The Spread
+    // Write Water to the Double Buffer!
+    write_buffer[local_index + 1].effect_stack |= WATER_BIT;
+}
+The Speed: A <= B is a native hardware instruction. It takes 1 clock cycle. Checking all 4 directions for gravity costs a microscopic 4 clock cycles.
+
+2. Fire checking for Flammability (The 256-Byte LUT)
+If Fire wants to spread East, how does it know if the East tile is Flammable?
+Bad Code: if (neighbor.biome == GRASS || neighbor.biome == WOOD || neighbor.biome == OIL)...
+If you have 40 flammable biomes, a massive if/else chain will cause Branch Prediction stalls.
+
+Instead, we use a 1D Lookup Table (LUT) exactly like we did for Chemistry.
+During engine startup, you create an array with exactly 256 slots (one for every possible Biome ID). You fill it with 1 (Flammable) or 0 (Not Flammable). It takes exactly 256 Bytes of memory.
+
+C++
+// Global array loaded at startup
+uint8_t FLAMMABILITY_LUT[256] = {0};
+FLAMMABILITY_LUT[Biome_Grass] = 1;
+FLAMMABILITY_LUT[Biome_Stone] = 0;
+
+// --- Inside the Physics Loop ---
+
+// Does the East neighbor have a flammable biome?
+if (FLAMMABILITY_LUT[neighbor_east.composition] == 1) {
+    
+    // Write Fire to the Double Buffer!
+    write_buffer[local_index + 1].effect_stack |= FIRE_BIT;
+}
+The Speed: The CPU takes the neighbor's Biome ID, jumps instantly to that slot in the 256-byte array, and reads a 1 or a 0. There are no if/else chains. It takes exactly 1 clock cycle.
+
+3. The 4-Way Unrolled Loop
+To get maximum speed, we don't write a for loop to check the 4 directions. We "unroll" it. We just write the check 4 times manually (North, South, East, West). This prevents the CPU from having to manage loop counters.
