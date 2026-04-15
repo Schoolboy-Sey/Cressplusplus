@@ -2,6 +2,7 @@
 
 
 #include "test.hpp"
+#include "simulation_manager.hpp"
 #include <gdextension_interface.h>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/defs.hpp>
@@ -17,6 +18,7 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level)
 
 	// Register your classes here, so they are available in the Godot editor and engine
 	GDREGISTER_CLASS(Test)
+	GDREGISTER_CLASS(SimulationManager)
 }
 
 void uninitialize_gdextension_types(ModuleInitializationLevel p_level) {

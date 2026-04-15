@@ -85,3 +85,51 @@ The Speed: The CPU takes the neighbor's Biome ID, jumps instantly to that slot i
 
 3. The 4-Way Unrolled Loop
 To get maximum speed, we don't write a for loop to check the 4 directions. We "unroll" it. We just write the check 4 times manually (North, South, East, West). This prevents the CPU from having to manage loop counters.
+
+Details on annihilation 
+
+. The 64-Bit Interaction Matrix (Your Annihilation Array)
+To make your 64-bit interaction idea work without slowing down the game, we are going to use the CTZ (Count Trailing Zeros) hardware trick we discussed earlier.
+
+We do not want to loop 64 times. If a tile only has 2 effects on it, we only want to loop 2 times.
+
+Here is the setup. During engine startup, we define the Annihilation Matrix. For every effect, we define a 64-bit mask of everything it destroys.
+
+uint64_t current_stack = tile.effect_stack;
+uint64_t remaining_stack = current_stack; // The actual physical effects
+uint64_t iterator_mask = current_stack;   // Used ONLY to step through the loop
+
+while (iterator_mask != 0) {
+    // 1. Find the next bit
+    int active_bit = __builtin_ctzll(iterator_mask);
+    
+    // 2. Does this bit still exist in the REAL stack? 
+    // (It might have been annihilated earlier in this exact loop)
+    if (remaining_stack & (1ULL << active_bit)) {
+        
+        uint64_t targets = ANNIHILATION_MATRIX[active_bit];
+        uint64_t actual_hits = remaining_stack & targets;
+        
+        // 3. The Mutual Destruction Check
+        if (actual_hits != 0) {
+            // It successfully hit something!
+            remaining_stack &= ~actual_hits;          // Destroy the targets
+            remaining_stack &= ~(1ULL << active_bit); // Destroy the initiator
+        }
+    }
+    
+    // 4. Turn off the bit in the ITERATOR to move forward.
+    // This leaves the remaining_stack completely untouched.
+    iterator_mask &= ~(1ULL << active_bit); 
+}
+
+tile.effect_stack = remaining_stack;
+
+Details on Chemistry. 
+
+Instead of looking at the entire stack at once, we assume that chemical reactions usually happen between two specific things (Water + Lightning).We create a 2D Array mapping every bit against every other bit.If you want all 64 bits to potentially combine, $64 \times 64$ combinations is only 4,096 entries. It takes a microscopic 32 Kilobytes of RAM.C++// 64x64 Matrix. Stores the 64-bit result of combining two specific bits.
+uint64_t CHEMISTRY_PAIRS[64][64] = {0};
+
+// Setup: Water (Bit 1) + Lightning (Bit 2) = Shocked Water (Bit 10)
+CHEMISTRY_PAIRS[1][2] = (1ULL << 10);
+How it runs: You use a nested CTZ loop (similar to the one above) to look at pairs of active bits. If CHEMISTRY_PAIRS[bit_A][bit_B] returns something greater than 0, you delete A and B, and insert the new result.Pros: Insanely low memory. Allows any of the 64 bits to mix.Cons: It cannot handle ternary reactions (A + B + C = D) in a single step.

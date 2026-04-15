@@ -1,0 +1,103 @@
+[gd_scene load_steps=2 format=3 uid="uid://c6r8q0y8k2x7j"]
+
+[ext_resource type="Script" uid="uid://deugviewscript" path="res://debug_view.gd" id="1_scen1"]
+
+[node name="DebugView" type="Node2D"]
+script = ExtResource("1_scen1")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="Control" type="Control" parent="CanvasLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="Panel" parent="CanvasLayer/Control"]
+visible = false
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -200.0
+offset_bottom = 150.0
+grow_horizontal = 0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer/Control/Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Edit Tile"
+
+[node name="CompInput" type="LineEdit" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+placeholder_text = "Composition (0-255)"
+
+[node name="ImpassableCheck" type="CheckBox" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Impassable"
+
+[node name="EffectLabel" type="Label" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Shift+RMB to place:"
+
+[node name="EffectDropdown" type="OptionButton" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+
+[node name="RunStepBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Run Step"
+
+[node name="Toggles" type="VBoxContainer" parent="CanvasLayer/Control"]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -150.0
+offset_top = -100.0
+grow_horizontal = 0
+grow_vertical = 0
+
+[node name="ScentToggle" type="CheckButton" parent="CanvasLayer/Control/Toggles"]
+layout_mode = 2
+button_pressed = true
+text = "Show Scent"
+
+[node name="BiomeToggle" type="CheckButton" parent="CanvasLayer/Control/Toggles"]
+layout_mode = 2
+button_pressed = true
+text = "Show Biome"
+
+[node name="ImpassableToggle" type="CheckButton" parent="CanvasLayer/Control/Toggles"]
+layout_mode = 2
+button_pressed = true
+text = "Show Impassable"
+
+[node name="Help" type="Label" parent="CanvasLayer/Control"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -46.0
+offset_right = 300.0
+grow_vertical = 0
+text = "LMB: Select Tile
+RMB: Set Player Pos"
+
+[connection signal="text_changed" from="CanvasLayer/Control/Panel/VBoxContainer/CompInput" to="." method="_on_comp_input_text_changed"]
+[connection signal="toggled" from="CanvasLayer/Control/Panel/VBoxContainer/ImpassableCheck" to="." method="_on_impassable_check_toggled"]
+[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/RunStepBtn" to="." method="_on_run_step_pressed"]
+[connection signal="toggled" from="CanvasLayer/Control/Toggles/ScentToggle" to="." method="_on_toggle_scent_toggled"]
+[connection signal="toggled" from="CanvasLayer/Control/Toggles/BiomeToggle" to="." method="_on_toggle_biome_toggled"]
+[connection signal="toggled" from="CanvasLayer/Control/Toggles/ImpassableToggle" to="." method="_on_toggle_impassable_toggled"]

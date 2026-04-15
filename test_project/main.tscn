@@ -4,3 +4,5 @@
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_ig7tw")
+
+[node name="GameManager" type="Node" parent="."]

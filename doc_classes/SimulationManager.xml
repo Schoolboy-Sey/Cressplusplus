@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="SimulationManager" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Manages the 16-byte bitwise grid simulation, including scent propagation and the Branchless ALU.
+	</brief_description>
+	<description>
+		The SimulationManager is the primary GDExtension bridge between Godot and the C++ simulation engine. It handles the lifetime of the grid memory, the execution of the "Smellnet" AI pathfinding, and the Branchless ALU for complex elemental interactions.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="add_annihilation">
+			<return type="void" />
+			<param index="0" name="bit_a" type="int" />
+			<param index="1" name="bit_b" type="int" />
+			<description>
+				Registers a mutual annihilation rule between two effect bits. If both bits are present on a tile during a simulation step, they will both be destroyed.
+			</description>
+		</method>
+		<method name="add_biome_transition">
+			<return type="void" />
+			<param index="0" name="biome_id" type="int" />
+			<param index="1" name="effect_bit" type="int" />
+			<param index="2" name="result_biome_id" type="int" />
+			<description>
+				Defines how a specific biome reacts to a surviving effect bit. For example, Fire (effect) on Grass (biome) could result in Ash (new biome).
+			</description>
+		</method>
+		<method name="add_chemistry">
+			<return type="void" />
+			<param index="0" name="bit_a" type="int" />
+			<param index="1" name="bit_b" type="int" />
+			<param index="2" name="result_stack" type="int" />
+			<description>
+				Registers a chemical combination rule. If Bit A and Bit B are present, they are consumed to create the resulting effect stack (which can contain one or more bits).
+			</description>
+		</method>
+		<method name="clear_interaction_tables">
+			<return type="void" />
+			<description>
+				Wipes all annihilation, chemistry, and biome transition rules from the LUTs. Useful for re-loading definitions from JSON.
+			</description>
+		</method>
+		<method name="generate_new_world">
+			<return type="void" />
+			<param index="0" name="seed" type="int" />
+			<description>
+				Clears the grid and generates a new world state based on the provided seed.
+			</description>
+		</method>
+		<method name="get_grid_data" qualifiers="const">
+			<return type="PackedByteArray" />
+			<description>
+				Returns the raw 1D array of 16-byte tiles as a PackedByteArray, suitable for passing to Vulkan Storage Buffers in Godot shaders.
+			</description>
+		</method>
+		<method name="get_scent" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="z" type="int" />
+			<description>
+				Returns the 4-bit scent value (0-15) for the specified coordinate.
+			</description>
+		</method>
+		<method name="get_tile_composition" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="z" type="int" />
+			<description>
+				Returns the 8-bit composition (biome ID) of the specified tile.
+			</description>
+		</method>
+		<method name="get_tile_effects" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="z" type="int" />
+			<description>
+				Returns the current 64-bit effect stack for the specified tile.
+			</description>
+		</method>
+		<method name="is_impassable" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="z" type="int" />
+			<description>
+				Returns true if the tile is flagged as impassable for scent propagation and unit movement.
+			</description>
+		</method>
+		<method name="run_scent_update">
+			<return type="void" />
+			<param index="0" name="player_x" type="int" />
+			<param index="1" name="player_z" type="int" />
+			<description>
+				Executes the BFS scent propagation algorithm from the player's current position.
+			</description>
+		</method>
+		<method name="run_step">
+			<return type="void" />
+			<description>
+				Executes one discrete simulation step, processing the Branchless ALU for all active tiles. Transient effects are cleared at the end of the step.
+			</description>
+		</method>
+		<method name="set_impassable">
+			<return type="void" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="z" type="int" />
+			<param index="2" name="impassable" type="bool" />
+			<description>
+				Sets or clears the impassable flag for the specified tile.
+			</description>
+		</method>
+		<method name="set_tile_composition">
+			<return type="void" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="z" type="int" />
+			<param index="2" name="composition" type="int" />
+			<description>
+				Manually sets the composition (biome ID) for a specific tile.
+			</description>
+		</method>
+		<method name="set_tile_effect">
+			<return type="void" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="z" type="int" />
+			<param index="2" name="effect_bit" type="int" />
+			<description>
+				Injects an effect bit into the specified tile's effect stack.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="map_height" type="int" setter="" getter="get_map_height" default="32">
+			The vertical height of the grid in tiles.
+		</member>
+		<member name="map_width" type="int" setter="" getter="get_map_width" default="32">
+			The horizontal width of the grid in tiles.
+		</member>
+	</members>
+</class>

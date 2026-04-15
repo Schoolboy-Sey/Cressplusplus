@@ -13,7 +13,7 @@ config_version=5
 config/name="Cress The Game"
 config/description="A game focused on cellular automata and turn based actions and reactions. "
 config/version=".01"
-run/main_scene="res://main.tscn"
+run/main_scene="res://debug_view.tscn"
 config/features=PackedStringArray("4.5", "GL Compatibility")
 config/icon="res://icon.svg"
 
