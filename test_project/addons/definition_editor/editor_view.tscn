@@ -1,0 +1,304 @@
+[gd_scene load_steps=2 format=3 uid="uid://editorview123"]
+
+[ext_resource type="Script" path="res://addons/definition_editor/editor_view.gd" id="1_script"]
+
+[node name="DefinitionEditor" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_script")
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="TopBar" type="HBoxContainer" parent="VBox"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Label" type="Label" parent="VBox/TopBar"]
+layout_mode = 2
+text = "Section:"
+
+[node name="SectionSelector" type="OptionButton" parent="VBox/TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+item_count = 4
+selected = 0
+popup/item_0/text = "Biomes"
+popup/item_0/id = 0
+popup/item_1/text = "Effects"
+popup/item_1/id = 1
+popup/item_2/text = "Interactions"
+popup/item_2/id = 2
+popup/item_3/text = "Transitions"
+popup/item_3/id = 3
+
+[node name="HSeparator" type="HSeparator" parent="VBox"]
+layout_mode = 2
+
+[node name="MainArea" type="Control" parent="VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="BiomesPanel" type="VBoxContainer" parent="VBox/MainArea"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="VBox/MainArea/BiomesPanel"]
+layout_mode = 2
+text = "Select Mana Bits to target Biome ID:"
+theme_override_font_sizes/font_size = 18
+
+[node name="BiomeIDLabel" type="Label" parent="VBox/MainArea/BiomesPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Target ID: 0"
+theme_override_colors/font_color = Color(0, 0.8, 1, 1)
+
+[node name="BiomeCheckboxes" type="HFlowContainer" parent="VBox/MainArea/BiomesPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="VBox/MainArea/BiomesPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Label" type="Label" parent="VBox/MainArea/BiomesPanel/HBox"]
+layout_mode = 2
+text = "Biome Name:"
+
+[node name="BiomeNameInput" type="LineEdit" parent="VBox/MainArea/BiomesPanel/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Enter biome name..."
+
+[node name="HBoxDesc" type="HBoxContainer" parent="VBox/MainArea/BiomesPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Label" type="Label" parent="VBox/MainArea/BiomesPanel/HBoxDesc"]
+layout_mode = 2
+text = "Description:"
+
+[node name="BiomeDescInput" type="TextEdit" parent="VBox/MainArea/BiomesPanel/HBoxDesc"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Enter flavor text or gameplay notes..."
+
+[node name="UpdateBiomeBtn" type="Button" parent="VBox/MainArea/BiomesPanel"]
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Update Biome Name"
+
+[node name="EffectsPanel" type="VBoxContainer" parent="VBox/MainArea"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HBox" type="HBoxContainer" parent="VBox/MainArea/EffectsPanel"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="VBox/MainArea/EffectsPanel/HBox"]
+layout_mode = 2
+text = "Effect Stack Byte (0-7):"
+
+[node name="ByteSelector" type="SpinBox" parent="VBox/MainArea/EffectsPanel/HBox"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 7.0
+
+[node name="EffectInputs" type="GridContainer" parent="VBox/MainArea/EffectsPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 20
+columns = 2
+
+[node name="InteractionsPanel" type="HSplitContainer" parent="VBox/MainArea"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="IntList" type="ItemList" parent="VBox/MainArea/InteractionsPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="IntEditor" type="VBoxContainer" parent="VBox/MainArea/InteractionsPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="Label" type="Label" parent="VBox/MainArea/InteractionsPanel/IntEditor"]
+layout_mode = 2
+text = "Edit Interaction"
+theme_override_font_sizes/font_size = 18
+
+[node name="IntType" type="OptionButton" parent="VBox/MainArea/InteractionsPanel/IntEditor"]
+unique_name_in_owner = true
+layout_mode = 2
+item_count = 2
+selected = 0
+popup/item_0/text = "Annihilation"
+popup/item_0/id = 0
+popup/item_1/text = "Chemistry"
+popup/item_1/id = 1
+
+[node name="Grid" type="GridContainer" parent="VBox/MainArea/InteractionsPanel/IntEditor"]
+layout_mode = 2
+columns = 2
+
+[node name="L1" type="Label" parent="VBox/MainArea/InteractionsPanel/IntEditor/Grid"]
+layout_mode = 2
+text = "Effect A:"
+
+[node name="IntA" type="OptionButton" parent="VBox/MainArea/InteractionsPanel/IntEditor/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="L2" type="Label" parent="VBox/MainArea/InteractionsPanel/IntEditor/Grid"]
+layout_mode = 2
+text = "Effect B:"
+
+[node name="IntB" type="OptionButton" parent="VBox/MainArea/InteractionsPanel/IntEditor/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="LResult" type="Label" parent="VBox/MainArea/InteractionsPanel/IntEditor/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Result:"
+
+[node name="IntResult" type="OptionButton" parent="VBox/MainArea/InteractionsPanel/IntEditor/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBox" type="HBoxContainer" parent="VBox/MainArea/InteractionsPanel/IntEditor"]
+layout_mode = 2
+
+[node name="AddIntBtn" type="Button" parent="VBox/MainArea/InteractionsPanel/IntEditor/HBox"]
+layout_mode = 2
+text = "Add / Update"
+
+[node name="DeleteIntBtn" type="Button" parent="VBox/MainArea/InteractionsPanel/IntEditor/HBox"]
+layout_mode = 2
+text = "Delete Selected"
+
+[node name="TransitionsPanel" type="HSplitContainer" parent="VBox/MainArea"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TransList" type="ItemList" parent="VBox/MainArea/TransitionsPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TransEditor" type="VBoxContainer" parent="VBox/MainArea/TransitionsPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="Label" type="Label" parent="VBox/MainArea/TransitionsPanel/TransEditor"]
+layout_mode = 2
+text = "Edit Transition"
+theme_override_font_sizes/font_size = 18
+
+[node name="LabelStart" type="Label" parent="VBox/MainArea/TransitionsPanel/TransEditor"]
+layout_mode = 2
+text = "Initial Biome Bits:"
+
+[node name="TransStartCheckboxes" type="HFlowContainer" parent="VBox/MainArea/TransitionsPanel/TransEditor"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="LabelEffect" type="Label" parent="VBox/MainArea/TransitionsPanel/TransEditor"]
+layout_mode = 2
+text = "Applying Effect:"
+
+[node name="TransEffect" type="OptionButton" parent="VBox/MainArea/TransitionsPanel/TransEditor"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="LabelEnd" type="Label" parent="VBox/MainArea/TransitionsPanel/TransEditor"]
+layout_mode = 2
+text = "Resulting Biome Bits:"
+
+[node name="TransEndCheckboxes" type="HFlowContainer" parent="VBox/MainArea/TransitionsPanel/TransEditor"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="VBox/MainArea/TransitionsPanel/TransEditor"]
+layout_mode = 2
+
+[node name="AddTransBtn" type="Button" parent="VBox/MainArea/TransitionsPanel/TransEditor/HBox"]
+layout_mode = 2
+text = "Add / Update"
+
+[node name="DeleteTransBtn" type="Button" parent="VBox/MainArea/TransitionsPanel/TransEditor/HBox"]
+layout_mode = 2
+text = "Delete Selected"
+
+[node name="HSeparator2" type="HSeparator" parent="VBox"]
+layout_mode = 2
+
+[node name="BottomBar" type="HBoxContainer" parent="VBox"]
+layout_mode = 2
+
+[node name="SaveAllBtn" type="Button" parent="VBox/BottomBar"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 1, 0.4, 1)
+text = "SAVE ALL TO DEFINITIONS.JSON"
+
+[connection signal="item_selected" from="VBox/TopBar/SectionSelector" to="." method="_on_section_selected"]
+[connection signal="pressed" from="VBox/MainArea/BiomesPanel/UpdateBiomeBtn" to="." method="_on_update_biome_pressed"]
+[connection signal="value_changed" from="VBox/MainArea/EffectsPanel/HBox/ByteSelector" to="." method="_on_byte_changed"]
+[connection signal="item_selected" from="VBox/MainArea/InteractionsPanel/IntList" to="." method="_on_int_selected"]
+[connection signal="item_selected" from="VBox/MainArea/InteractionsPanel/IntEditor/IntType" to="." method="_on_int_type_changed"]
+[connection signal="pressed" from="VBox/MainArea/InteractionsPanel/IntEditor/HBox/AddIntBtn" to="." method="_on_add_int_pressed"]
+[connection signal="pressed" from="VBox/MainArea/InteractionsPanel/IntEditor/HBox/DeleteIntBtn" to="." method="_on_delete_int_pressed"]
+[connection signal="item_selected" from="VBox/MainArea/TransitionsPanel/TransList" to="." method="_on_trans_selected"]
+[connection signal="pressed" from="VBox/MainArea/TransitionsPanel/TransEditor/HBox/AddTransBtn" to="." method="_on_add_trans_pressed"]
+[connection signal="pressed" from="VBox/MainArea/TransitionsPanel/TransEditor/HBox/DeleteTransBtn" to="." method="_on_delete_trans_pressed"]
+[connection signal="pressed" from="VBox/BottomBar/SaveAllBtn" to="." method="_on_save_all_pressed"]

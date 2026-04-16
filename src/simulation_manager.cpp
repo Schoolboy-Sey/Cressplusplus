@@ -33,6 +33,7 @@ void SimulationManager::_bind_methods() {
     
     ClassDB::bind_method(D_METHOD("get_scent", "x", "z"), &SimulationManager::get_scent);
     ClassDB::bind_method(D_METHOD("run_scent_update", "player_x", "player_z"), &SimulationManager::run_scent_update);
+    ClassDB::bind_method(D_METHOD("get_scent_map_string"), &SimulationManager::get_scent_map_string);
     ClassDB::bind_method(D_METHOD("get_grid_data"), &SimulationManager::get_grid_data);
     
     ClassDB::bind_method(D_METHOD("clear_interaction_tables"), &SimulationManager::clear_interaction_tables);
@@ -260,3 +261,26 @@ PackedByteArray SimulationManager::get_grid_data() const {
     memcpy(ptr, grid.data(), grid.size() * sizeof(Tile));
     return data;
 }
+
+String SimulationManager::get_scent_map_string() const {
+    String res = "";
+    for (int z = 0; z < map_height; ++z) {
+        for (int x = 0; x < map_width; ++x) {
+            if (is_impassable(x, z)) {
+                res += " # ";
+            } else {
+                int scent = get_scent(x, z);
+                if (scent == 0) {
+                    res += " . ";
+                } else {
+                    char buf[4];
+                    snprintf(buf, sizeof(buf), "%2d ", scent);
+                    res += buf;
+                }
+            }
+        }
+        res += "\n";
+    }
+    return res;
+}
+

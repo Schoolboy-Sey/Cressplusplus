@@ -16,12 +16,15 @@ All notable changes to the Cress project will be documented in this file.
     - **Interaction Tables**: Added methods to populate ALU LUTs from external data (`add_annihilation`, `add_chemistry`, `add_biome_transition`).
     - **Smellnet**: BFS scent propagation algorithm.
     - **Utility**: Added property accessors and grid data exposure for Godot.
-- **2D Debug Visualization (`test_project/debug_view.tscn/gd`)**:
+- **2D Debug Visualization Upgrades (`test_project/debug_view.tscn/gd`)**:
+    - **Mana Bitflag Checkboxes**: Replaced biome dropdown with individual checkboxes for each Mana bit (W, F, E, Pl, Pu, R, Mi, Ma), allowing for direct composition of complex biomes.
+    - **Visual Effects**: Active effects are now rendered as small, color-coded balls that orbit the center of the tile, providing a clear view of multiple simultaneous effects.
+    - **Save/Load System**: Implemented a JSON-based save/load system (`user://grid_save.json`) to persist grid configurations, including biomes, impassable flags, and active effects.
+    - **UI Enhancements**: Expanded the edit panel and improved the layout for better accessibility.
     - **JSON Definitions**: Now loads biome, effect, and interaction rules from `test_project/definitions.json`.
     - **Effect Interaction Testing**:
         - **Shift + RMB**: Place the currently selected effect from the dropdown onto a tile.
         - **Run Step Button**: Executes the simulation step (ALU processing).
-    - **Visuals**: Added orange outlines for tiles with active effects.
 - **GDExtension Registration**: Registered `SimulationManager` in `register_types.cpp`.
 - **Class Documentation (`doc_classes/SimulationManager.xml`)**: Added comprehensive XML documentation for the `SimulationManager` class, including detailed descriptions of all methods and properties for Godot Editor integration.
 

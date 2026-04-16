@@ -54,6 +54,7 @@ public:
     // For smellnet verification
     int get_scent(int x, int z) const;
     void run_scent_update(int player_x, int player_z);
+    String get_scent_map_string() const;
     
     // Expose the grid data to Godot as a PackedByteArray
     PackedByteArray get_grid_data() const;

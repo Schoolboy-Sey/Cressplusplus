@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3 uid="uid://c6r8q0y8k2x7j"]
+[gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" uid="uid://deugviewscript" path="res://debug_view.gd" id="1_scen1"]
+[ext_resource type="Script" path="res://debug_view.gd" id="1_scen1"]
 
 [node name="DebugView" type="Node2D"]
 script = ExtResource("1_scen1")
@@ -23,7 +23,7 @@ anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
 offset_left = -200.0
-offset_bottom = 150.0
+offset_bottom = 450.0
 grow_horizontal = 0
 
 [node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer/Control/Panel"]
@@ -38,9 +38,18 @@ grow_vertical = 2
 layout_mode = 2
 text = "Edit Tile"
 
+[node name="BiomeName" type="Label" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Name: Plains"
+autowrap_mode = 3
+
 [node name="CompInput" type="LineEdit" parent="CanvasLayer/Control/Panel/VBoxContainer"]
 layout_mode = 2
 placeholder_text = "Composition (0-255)"
+
+[node name="BitContainer" type="GridContainer" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+columns = 2
 
 [node name="ImpassableCheck" type="CheckBox" parent="CanvasLayer/Control/Panel/VBoxContainer"]
 layout_mode = 2
@@ -56,6 +65,17 @@ layout_mode = 2
 [node name="RunStepBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
 layout_mode = 2
 text = "Run Step"
+
+[node name="HSeparator" type="HSeparator" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+
+[node name="SaveBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Save Grid"
+
+[node name="LoadBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Load Grid"
 
 [node name="Toggles" type="VBoxContainer" parent="CanvasLayer/Control"]
 layout_mode = 1
@@ -98,6 +118,8 @@ RMB: Set Player Pos"
 [connection signal="text_changed" from="CanvasLayer/Control/Panel/VBoxContainer/CompInput" to="." method="_on_comp_input_text_changed"]
 [connection signal="toggled" from="CanvasLayer/Control/Panel/VBoxContainer/ImpassableCheck" to="." method="_on_impassable_check_toggled"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/RunStepBtn" to="." method="_on_run_step_pressed"]
+[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/SaveBtn" to="." method="_on_save_pressed"]
+[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/LoadBtn" to="." method="_on_load_pressed"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/ScentToggle" to="." method="_on_toggle_scent_toggled"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/BiomeToggle" to="." method="_on_toggle_biome_toggled"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/ImpassableToggle" to="." method="_on_toggle_impassable_toggled"]

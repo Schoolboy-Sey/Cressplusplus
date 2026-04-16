@@ -15,6 +15,8 @@ var biome_names = {}
 
 @onready var ui_panel = $CanvasLayer/Control/Panel
 @onready var comp_input = $CanvasLayer/Control/Panel/VBoxContainer/CompInput
+@onready var biome_name_label = $CanvasLayer/Control/Panel/VBoxContainer/BiomeName
+@onready var bit_container = $CanvasLayer/Control/Panel/VBoxContainer/BitContainer
 @onready var impassable_check = $CanvasLayer/Control/Panel/VBoxContainer/ImpassableCheck
 @onready var effect_dropdown = $CanvasLayer/Control/Panel/VBoxContainer/EffectDropdown
 
@@ -22,9 +24,29 @@ func _ready():
 	sim = SimulationManager.new()
 	add_child(sim)
 	_load_definitions()
+	_setup_bit_checkboxes()
 	sim.generate_new_world(42)
 	sim.run_scent_update(player_pos.x, player_pos.y)
 	queue_redraw()
+
+func _setup_bit_checkboxes():
+	var names = ["W (1)", "F (2)", "E (4)", "Pl (8)", "Pu (16)", "R (32)", "Mi (64)", "Ma (128)"]
+	for i in range(8):
+		var cb = CheckBox.new()
+		cb.text = names[i]
+		cb.toggled.connect(_on_bit_toggled.bind(1 << i))
+		bit_container.add_child(cb)
+
+func _on_bit_toggled(toggled: bool, bit: int):
+	if selected_tile.x != -1:
+		var current = sim.get_tile_composition(selected_tile.x, selected_tile.y)
+		if toggled:
+			current |= bit
+		else:
+			current &= ~bit
+		sim.set_tile_composition(selected_tile.x, selected_tile.y, current)
+		comp_input.text = str(current)
+		queue_redraw()
 
 func _load_definitions():
 	var file = FileAccess.open("res://definitions.json", FileAccess.READ)
@@ -36,12 +58,13 @@ func _load_definitions():
 			
 			# Map Biomes
 			for b in definitions.biomes:
-				biome_names[b.id] = b.name
+				biome_names[int(b.id)] = b.name
 				
 			# Map Effects
 			for e in definitions.effects:
-				effect_names[e.bit] = e.name
-				effect_dropdown.add_item(e.name, e.bit)
+				var bit = int(e.bit)
+				effect_names[bit] = e.name
+				effect_dropdown.add_item(e.name, bit)
 				
 			# Map Interactions
 			for i in definitions.interactions:
@@ -96,8 +119,21 @@ func _input(event):
 func _update_ui():
 	if selected_tile.x != -1:
 		ui_panel.show()
-		comp_input.text = str(sim.get_tile_composition(selected_tile.x, selected_tile.y))
+		var comp = sim.get_tile_composition(selected_tile.x, selected_tile.y)
+		comp_input.text = str(comp)
+		
+		# Update Biome Name
+		if biome_names.has(comp):
+			biome_name_label.text = biome_names[comp]
+		else:
+			biome_name_label.text = "Unknown Biome (%d)" % comp
+			
 		impassable_check.button_pressed = sim.is_impassable(selected_tile.x, selected_tile.y)
+		
+		var cbs = bit_container.get_children()
+		for i in range(8):
+			if i < cbs.size():
+				cbs[i].set_pressed_no_signal((comp & (1 << i)) != 0)
 	else:
 		ui_panel.hide()
 
@@ -109,6 +145,7 @@ func _on_run_step_pressed():
 func _on_comp_input_text_changed(new_text):
 	if selected_tile.x != -1:
 		sim.set_tile_composition(selected_tile.x, selected_tile.y, int(new_text))
+		_update_ui() # Sync checkboxes
 		queue_redraw()
 
 func _on_impassable_check_toggled(button_pressed):
@@ -116,6 +153,44 @@ func _on_impassable_check_toggled(button_pressed):
 		sim.set_impassable(selected_tile.x, selected_tile.y, button_pressed)
 		sim.run_scent_update(player_pos.x, player_pos.y)
 		queue_redraw()
+
+func _on_save_pressed():
+	var data = {
+		"width": sim.map_width,
+		"height": sim.map_height,
+		"player": {"x": player_pos.x, "y": player_pos.y},
+		"tiles": []
+	}
+	for z in range(sim.map_height):
+		for x in range(sim.map_width):
+			var tile = {
+				"x": x, "z": z,
+				"comp": sim.get_tile_composition(x, z),
+				"imp": sim.is_impassable(x, z),
+				"eff": sim.get_tile_effects(x, z)
+			}
+			if tile.comp != 0 or tile.imp or tile.eff != 0:
+				data.tiles.append(tile)
+	
+	var file = FileAccess.open("user://grid_save.json", FileAccess.WRITE)
+	file.store_string(JSON.stringify(data))
+	print("Saved to user://grid_save.json")
+
+func _on_load_pressed():
+	if not FileAccess.file_exists("user://grid_save.json"): return
+	var file = FileAccess.open("user://grid_save.json", FileAccess.READ)
+	var data = JSON.parse_string(file.get_as_text())
+	
+	sim.generate_new_world(0) # Clear
+	player_pos = Vector2i(data.player.x, data.player.y)
+	
+	for t in data.tiles:
+		sim.set_tile_composition(t.x, t.z, t.comp)
+		sim.set_impassable(t.x, t.z, t.imp)
+		sim.set_tile_effect(t.x, t.z, int(t.eff))
+	
+	sim.run_scent_update(player_pos.x, player_pos.y)
+	queue_redraw()
 
 func _on_toggle_scent_toggled(button_pressed):
 	show_scent = button_pressed
@@ -151,16 +226,34 @@ func _draw():
 			if show_impassable and sim.is_impassable(x, z):
 				draw_rect(rect.grow(-2), Color.BLACK, false, 2.0)
 				
-			# Draw Effects
+			# Draw Effects as small balls
 			var effects = sim.get_tile_effects(x, z)
 			if effects != 0:
-				draw_rect(rect.grow(-4), Color.ORANGE, false, 1.0)
+				var center = rect.get_center()
+				var angle = 0.0
+				var count = 0
+				for i in range(16): # Check first 16 bits for visualization
+					if effects & (1 << i):
+						count += 1
+				
+				var i_found = 0
+				for i in range(16):
+					if effects & (1 << i):
+						var ball_pos = center
+						if count > 1:
+							var radius = 5.0
+							ball_pos += Vector2(cos(angle), sin(angle)) * radius
+							angle += (2.0 * PI) / count
+						
+						var ball_color = _get_mana_color(1 << i)
+						draw_circle(ball_pos, 3, ball_color)
+						i_found += 1
 				
 			# Draw Scent
 			if show_scent:
 				var scent = sim.get_scent(x, z)
 				if scent > 0:
-					var scent_color = Color(0.8, 0, 0.8, 0.3) # Faint purple mist
+					var scent_color = Color(0.8, 0, 0.8, 0.2)
 					draw_rect(rect, scent_color)
 					draw_string($CanvasLayer/Control.get_theme_default_font(), rect.position + Vector2(2, 14), str(scent), HORIZONTAL_ALIGNMENT_LEFT, -1, 10)
 
@@ -175,6 +268,18 @@ func _draw():
 	if selected_tile.x != -1:
 		var sel_rect = Rect2(selected_tile.x * tile_size, selected_tile.y * tile_size, tile_size, tile_size)
 		draw_rect(sel_rect, Color.WHITE, false, 1.0)
+
+func _get_mana_color(bit: int) -> Color:
+	match bit:
+		1: return Color.BLUE    # W
+		2: return Color.RED     # F
+		4: return Color(0.6, 0.4, 0.2) # E
+		8: return Color.GREEN   # Pl
+		16: return Color.WHITE   # Pu
+		32: return Color(0.2, 0.1, 0.3) # R
+		64: return Color.GOLD    # Mi
+		128: return Color.CYAN   # Ma
+	return Color.GRAY
 
 func _get_biome_color(comp: int) -> Color:
 	if comp == 0: return Color(0.3, 0.4, 0.2) # Plains (Grass Green)
