@@ -27,8 +27,19 @@ All notable changes to the Cress project will be documented in this file.
         - **Run Step Button**: Executes the simulation step (ALU processing).
 - **GDExtension Registration**: Registered `SimulationManager` in `register_types.cpp`.
 - **Class Documentation (`doc_classes/SimulationManager.xml`)**: Added comprehensive XML documentation for the `SimulationManager` class, including detailed descriptions of all methods and properties for Godot Editor integration.
+- **Scent Verification Tooling**: 
+    - Added `get_scent_map_string()` to `SimulationManager` for ASCII-based debugging of the smellnet wavefront.
+    - Updated `test_project/main.gd` with rigorous U-trap verification tests to confirm BFS behavior.
+- **Godot Addon: "Definition Editor"**:
+    - Created a Main Screen plugin to edit `definitions.json` directly within the Godot editor.
+    - Supports Biome configuration (ID, Name, Description) using bitwise mana checkboxes.
+    - Includes an Effect Manager to name all 64 bits of the effect stack by byte.
+    - Features dedicated panels for managing Annihilation, Chemistry, and Biome Transition rules.
 
 ### Fixed
 - Resolved `static_assert` failure where `Tile` struct was exceeding 16 bytes due to default compiler padding.
 - Added MSVC compatibility for trailing zero counting intrinsics.
 - Fixed `debug_view.gd` parser error by using a more reliable font retrieval method.
+- **Fixed JSON Dictionary Lookups**: Added explicit `int()` casts for biome IDs and effect bits in `debug_view.gd` to prevent float-key mismatches from Godot's JSON parser.
+- **Improved UI Selection**: Updated `debug_view.gd` to draw the white selection square last, ensuring it's always visible on top of all layers.
+- **UI Descriptions**: Added a dynamic description field to the Biome editor in the "Definition Editor" addon.
