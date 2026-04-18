@@ -55,7 +55,7 @@ layout_mode = 2
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="BiomesPanel" type="VBoxContainer" parent="VBox/MainArea"]
+[node name="BiomesPanel" type="HSplitContainer" parent="VBox/MainArea"]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
@@ -64,51 +64,70 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Label" type="Label" parent="VBox/MainArea/BiomesPanel"]
+[node name="BiomeBrowser" type="VBoxContainer" parent="VBox/MainArea/BiomesPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 0.4
+
+[node name="BiomeSearch" type="LineEdit" parent="VBox/MainArea/BiomesPanel/BiomeBrowser"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Search biomes..."
+
+[node name="BiomeList" type="ItemList" parent="VBox/MainArea/BiomesPanel/BiomeBrowser"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="BiomeEditor" type="VBoxContainer" parent="VBox/MainArea/BiomesPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Label" type="Label" parent="VBox/MainArea/BiomesPanel/BiomeEditor"]
 layout_mode = 2
 text = "Select Mana Bits to target Biome ID:"
 theme_override_font_sizes/font_size = 18
 
-[node name="BiomeIDLabel" type="Label" parent="VBox/MainArea/BiomesPanel"]
+[node name="BiomeIDLabel" type="Label" parent="VBox/MainArea/BiomesPanel/BiomeEditor"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Target ID: 0"
 theme_override_colors/font_color = Color(0, 0.8, 1, 1)
 
-[node name="BiomeCheckboxes" type="HFlowContainer" parent="VBox/MainArea/BiomesPanel"]
+[node name="BiomeCheckboxes" type="HFlowContainer" parent="VBox/MainArea/BiomesPanel/BiomeEditor"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="HBox" type="HBoxContainer" parent="VBox/MainArea/BiomesPanel"]
+[node name="HBox" type="HBoxContainer" parent="VBox/MainArea/BiomesPanel/BiomeEditor"]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="Label" type="Label" parent="VBox/MainArea/BiomesPanel/HBox"]
+[node name="Label" type="Label" parent="VBox/MainArea/BiomesPanel/BiomeEditor/HBox"]
 layout_mode = 2
 text = "Biome Name:"
 
-[node name="BiomeNameInput" type="LineEdit" parent="VBox/MainArea/BiomesPanel/HBox"]
+[node name="BiomeNameInput" type="LineEdit" parent="VBox/MainArea/BiomesPanel/BiomeEditor/HBox"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "Enter biome name..."
 
-[node name="HBoxDesc" type="HBoxContainer" parent="VBox/MainArea/BiomesPanel"]
+[node name="HBoxDesc" type="HBoxContainer" parent="VBox/MainArea/BiomesPanel/BiomeEditor"]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="Label" type="Label" parent="VBox/MainArea/BiomesPanel/HBoxDesc"]
+[node name="Label" type="Label" parent="VBox/MainArea/BiomesPanel/BiomeEditor/HBoxDesc"]
 layout_mode = 2
 text = "Description:"
 
-[node name="BiomeDescInput" type="TextEdit" parent="VBox/MainArea/BiomesPanel/HBoxDesc"]
+[node name="BiomeDescInput" type="TextEdit" parent="VBox/MainArea/BiomesPanel/BiomeEditor/HBoxDesc"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "Enter flavor text or gameplay notes..."
 
-[node name="UpdateBiomeBtn" type="Button" parent="VBox/MainArea/BiomesPanel"]
+[node name="UpdateBiomeBtn" type="Button" parent="VBox/MainArea/BiomesPanel/BiomeEditor"]
 layout_mode = 2
 size_flags_horizontal = 0
 text = "Update Biome Name"
@@ -151,10 +170,20 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="IntList" type="ItemList" parent="VBox/MainArea/InteractionsPanel"]
-unique_name_in_owner = true
+[node name="IntBrowser" type="VBoxContainer" parent="VBox/MainArea/InteractionsPanel"]
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_stretch_ratio = 0.6
+
+[node name="IntSearch" type="LineEdit" parent="VBox/MainArea/InteractionsPanel/IntBrowser"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Search interactions..."
+
+[node name="IntList" type="ItemList" parent="VBox/MainArea/InteractionsPanel/IntBrowser"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
 
 [node name="IntEditor" type="VBoxContainer" parent="VBox/MainArea/InteractionsPanel"]
 layout_mode = 2
@@ -229,10 +258,20 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="TransList" type="ItemList" parent="VBox/MainArea/TransitionsPanel"]
-unique_name_in_owner = true
+[node name="TransBrowser" type="VBoxContainer" parent="VBox/MainArea/TransitionsPanel"]
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_stretch_ratio = 0.6
+
+[node name="TransSearch" type="LineEdit" parent="VBox/MainArea/TransitionsPanel/TransBrowser"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Search transitions..."
+
+[node name="TransList" type="ItemList" parent="VBox/MainArea/TransitionsPanel/TransBrowser"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
 
 [node name="TransEditor" type="VBoxContainer" parent="VBox/MainArea/TransitionsPanel"]
 layout_mode = 2
@@ -292,13 +331,17 @@ theme_override_colors/font_color = Color(0, 1, 0.4, 1)
 text = "SAVE ALL TO DEFINITIONS.JSON"
 
 [connection signal="item_selected" from="VBox/TopBar/SectionSelector" to="." method="_on_section_selected"]
-[connection signal="pressed" from="VBox/MainArea/BiomesPanel/UpdateBiomeBtn" to="." method="_on_update_biome_pressed"]
+[connection signal="text_changed" from="VBox/MainArea/BiomesPanel/BiomeBrowser/BiomeSearch" to="." method="_on_biome_search_changed"]
+[connection signal="item_selected" from="VBox/MainArea/BiomesPanel/BiomeBrowser/BiomeList" to="." method="_on_biome_selected"]
+[connection signal="pressed" from="VBox/MainArea/BiomesPanel/BiomeEditor/UpdateBiomeBtn" to="." method="_on_update_biome_pressed"]
 [connection signal="value_changed" from="VBox/MainArea/EffectsPanel/HBox/ByteSelector" to="." method="_on_byte_changed"]
-[connection signal="item_selected" from="VBox/MainArea/InteractionsPanel/IntList" to="." method="_on_int_selected"]
+[connection signal="text_changed" from="VBox/MainArea/InteractionsPanel/IntBrowser/IntSearch" to="." method="_on_int_search_changed"]
+[connection signal="item_selected" from="VBox/MainArea/InteractionsPanel/IntBrowser/IntList" to="." method="_on_int_selected"]
 [connection signal="item_selected" from="VBox/MainArea/InteractionsPanel/IntEditor/IntType" to="." method="_on_int_type_changed"]
 [connection signal="pressed" from="VBox/MainArea/InteractionsPanel/IntEditor/HBox/AddIntBtn" to="." method="_on_add_int_pressed"]
 [connection signal="pressed" from="VBox/MainArea/InteractionsPanel/IntEditor/HBox/DeleteIntBtn" to="." method="_on_delete_int_pressed"]
-[connection signal="item_selected" from="VBox/MainArea/TransitionsPanel/TransList" to="." method="_on_trans_selected"]
+[connection signal="text_changed" from="VBox/MainArea/TransitionsPanel/TransBrowser/TransSearch" to="." method="_on_trans_search_changed"]
+[connection signal="item_selected" from="VBox/MainArea/TransitionsPanel/TransBrowser/TransList" to="." method="_on_trans_selected"]
 [connection signal="pressed" from="VBox/MainArea/TransitionsPanel/TransEditor/HBox/AddTransBtn" to="." method="_on_add_trans_pressed"]
 [connection signal="pressed" from="VBox/MainArea/TransitionsPanel/TransEditor/HBox/DeleteTransBtn" to="." method="_on_delete_trans_pressed"]
 [connection signal="pressed" from="VBox/BottomBar/SaveAllBtn" to="." method="_on_save_all_pressed"]

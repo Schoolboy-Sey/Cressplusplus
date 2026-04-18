@@ -8,6 +8,7 @@ var show_impassable: bool = true
 
 var selected_tile: Vector2i = Vector2i(-1, -1)
 var player_pos: Vector2i = Vector2i(5, 5)
+var is_painting: bool = false
 
 var definitions = {}
 var effect_names = {}
@@ -101,13 +102,18 @@ func _get_biome_id(name: String) -> int:
 	return 0
 
 func _input(event):
-	if event is InputEventMouseButton and event.pressed:
-		var grid_pos = Vector2i(event.position / tile_size)
-		if grid_pos.x >= 0 and grid_pos.x < sim.map_width and grid_pos.y >= 0 and grid_pos.y < sim.map_height:
-			if event.button_index == MOUSE_BUTTON_LEFT:
-				selected_tile = grid_pos
-				_update_ui()
-			elif event.button_index == MOUSE_BUTTON_RIGHT:
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			is_painting = event.pressed
+			if event.pressed:
+				var grid_pos = Vector2i(event.position / tile_size)
+				if _is_valid_pos(grid_pos):
+					selected_tile = grid_pos
+					_update_ui()
+					queue_redraw()
+		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			var grid_pos = Vector2i(event.position / tile_size)
+			if _is_valid_pos(grid_pos):
 				if Input.is_key_pressed(KEY_SHIFT):
 					var effect_bit = effect_dropdown.get_selected_id()
 					sim.set_tile_effect(grid_pos.x, grid_pos.y, effect_bit)
@@ -115,6 +121,24 @@ func _input(event):
 					player_pos = grid_pos
 					sim.run_scent_update(player_pos.x, player_pos.y)
 				queue_redraw()
+				
+	elif event is InputEventMouseMotion and is_painting:
+		var grid_pos = Vector2i(event.position / tile_size)
+		if _is_valid_pos(grid_pos) and grid_pos != selected_tile:
+			# PAINT logic
+			if Input.is_key_pressed(KEY_CTRL): # Paint Impassable
+				sim.set_impassable(grid_pos.x, grid_pos.y, impassable_check.button_pressed)
+			elif Input.is_key_pressed(KEY_SHIFT): # Paint Effect
+				var effect_bit = effect_dropdown.get_selected_id()
+				sim.set_tile_effect(grid_pos.x, grid_pos.y, effect_bit)
+			else: # Paint Composition
+				var current_comp = int(comp_input.text)
+				sim.set_tile_composition(grid_pos.x, grid_pos.y, current_comp)
+			
+			queue_redraw()
+
+func _is_valid_pos(pos: Vector2i) -> bool:
+	return pos.x >= 0 and pos.x < sim.map_width and pos.y >= 0 and pos.y < sim.map_height
 
 func _update_ui():
 	if selected_tile.x != -1:
@@ -203,6 +227,13 @@ func _on_toggle_biome_toggled(button_pressed):
 func _on_toggle_impassable_toggled(button_pressed):
 	show_impassable = button_pressed
 	queue_redraw()
+
+func _on_load_definitions_pressed():
+	effect_dropdown.clear()
+	biome_names.clear()
+	_load_definitions()
+	_update_ui()
+	print("Definitions reloaded.")
 
 func _draw():
 	if not sim: return

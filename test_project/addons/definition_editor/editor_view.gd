@@ -10,6 +10,10 @@ func _ready():
 	_update_ui()
 
 func _setup_checkboxes():
+	# Clear existing if any (re-ready safety)
+	for container in [%BiomeCheckboxes, %TransStartCheckboxes, %TransEndCheckboxes]:
+		for child in container.get_children(): child.queue_free()
+	
 	for container in [%BiomeCheckboxes, %TransStartCheckboxes, %TransEndCheckboxes]:
 		for i in range(8):
 			var cb = CheckBox.new()
@@ -17,6 +21,7 @@ func _setup_checkboxes():
 			cb.toggled.connect(_on_biome_checkbox_changed)
 			container.add_child(cb)
 			
+	for child in %EffectInputs.get_children(): child.queue_free()
 	for i in range(8):
 		var lbl = Label.new()
 		lbl.text = "Bit %d:" % i
@@ -33,6 +38,7 @@ func _load_json():
 		if json:
 			data = json
 	_refresh_dropdowns()
+	_refresh_all_lists()
 
 func _refresh_dropdowns():
 	for dd in [%IntA, %IntB, %IntResult, %TransEffect]:
@@ -40,12 +46,15 @@ func _refresh_dropdowns():
 		for e in data.effects:
 			dd.add_item(e.name, int(e.bit))
 
+func _refresh_all_lists():
+	_refresh_biome_list()
+	_refresh_int_list()
+	_refresh_trans_list()
+
 func _update_ui():
 	_on_section_selected(%SectionSelector.selected)
 	_on_biome_checkbox_changed(false)
 	_on_byte_changed(%ByteSelector.value)
-	_refresh_int_list()
-	_refresh_trans_list()
 
 func _on_section_selected(index):
 	%BiomesPanel.visible = (index == 0)
@@ -55,18 +64,35 @@ func _on_section_selected(index):
 
 # --- Biomes Logic ---
 
+func _refresh_biome_list():
+	%BiomeList.clear()
+	var filter = %BiomeSearch.text.to_lower()
+	for b in data.biomes:
+		if filter == "" or b.name.to_lower().contains(filter):
+			%BiomeList.add_item("[%d] %s" % [int(b.id), b.name])
+			%BiomeList.set_item_metadata(%BiomeList.get_item_count()-1, int(b.id))
+
+func _on_biome_search_changed(_new_text):
+	_refresh_biome_list()
+
+func _on_biome_selected(index):
+	var id = %BiomeList.get_item_metadata(index)
+	_set_checkbox_id(%BiomeCheckboxes, id)
+	_on_biome_checkbox_changed(true)
+
 func _get_checkbox_id(container):
 	var id = 0
 	var cbs = container.get_children()
 	for i in range(8):
-		if cbs[i].button_pressed:
+		if i < cbs.size() and cbs[i].button_pressed:
 			id |= (1 << i)
 	return id
 
 func _set_checkbox_id(container, id):
 	var cbs = container.get_children()
 	for i in range(8):
-		cbs[i].set_pressed_no_signal((id & (1 << i)) != 0)
+		if i < cbs.size():
+			cbs[i].set_pressed_no_signal((id & (1 << i)) != 0)
 
 func _on_biome_checkbox_changed(_toggled):
 	var id = _get_checkbox_id(%BiomeCheckboxes)
@@ -88,17 +114,16 @@ func _on_update_biome_pressed():
 	for b in data.biomes:
 		if int(b.id) == id:
 			b.name = b_name
-			if b_desc != "":
-				b.desc = b_desc
-			elif b.has("desc"):
-				b.remove("desc")
+			if b_desc != "": b.desc = b_desc
+			elif b.has("desc"): b.erase("desc")
 			found = true
 			break
 	if not found:
 		var new_biome = {"id": id, "name": b_name}
-		if b_desc != "":
-			new_biome["desc"] = b_desc
+		if b_desc != "": new_biome["desc"] = b_desc
 		data.biomes.append(new_biome)
+	
+	_refresh_biome_list()
 	_refresh_trans_list()
 
 # --- Effects Logic ---
@@ -140,22 +165,31 @@ func _on_effect_name_changed(new_name, local_bit_idx):
 
 func _refresh_int_list():
 	%IntList.clear()
-	for i in data.interactions:
-		var text = "[%s] %s + %s" % [i.type.capitalize(), i.a, i.b]
-		if i.has("result"): text += " -> " + i.result
-		%IntList.add_item(text)
+	var filter = %IntSearch.text.to_lower()
+	for i in range(data.interactions.size()):
+		var interaction = data.interactions[i]
+		var text = "[%s] %s + %s" % [interaction.type.capitalize(), interaction.a, interaction.b]
+		if interaction.has("result"): text += " -> " + interaction.result
+		
+		if filter == "" or text.to_lower().contains(filter):
+			%IntList.add_item(text)
+			%IntList.set_item_metadata(%IntList.get_item_count()-1, i)
+
+func _on_int_search_changed(_new_text):
+	_refresh_int_list()
 
 func _on_int_type_changed(index):
 	%LResult.visible = (index == 1)
 	%IntResult.visible = (index == 1)
 
 func _on_int_selected(index):
-	var i = data.interactions[index]
-	%IntType.selected = 0 if i.type == "annihilation" else 1
+	var actual_idx = %IntList.get_item_metadata(index)
+	var interaction = data.interactions[actual_idx]
+	%IntType.selected = 0 if interaction.type == "annihilation" else 1
 	_on_int_type_changed(%IntType.selected)
-	_set_option_text(%IntA, i.a)
-	_set_option_text(%IntB, i.b)
-	if i.has("result"): _set_option_text(%IntResult, i.result)
+	_set_option_text(%IntA, interaction.a)
+	_set_option_text(%IntB, interaction.b)
+	if interaction.has("result"): _set_option_text(%IntResult, interaction.result)
 
 func _set_option_text(opt, text):
 	for i in range(opt.item_count):
@@ -172,7 +206,6 @@ func _on_add_int_pressed():
 	if interaction.type == "chemistry":
 		interaction["result"] = %IntResult.get_item_text(%IntResult.selected)
 	
-	# Check if exists
 	var found = false
 	for i in range(data.interactions.size()):
 		var existing = data.interactions[i]
@@ -187,18 +220,28 @@ func _on_add_int_pressed():
 func _on_delete_int_pressed():
 	var selected = %IntList.get_selected_items()
 	if selected.size() > 0:
-		data.interactions.remove_at(selected[0])
+		var actual_idx = %IntList.get_item_metadata(selected[0])
+		data.interactions.remove_at(actual_idx)
 		_refresh_int_list()
 
 # --- Transitions Logic ---
 
 func _refresh_trans_list():
 	%TransList.clear()
-	for t in data.transitions:
-		%TransList.add_item("%s + %s -> %s" % [t.biome, t.effect, t.result])
+	var filter = %TransSearch.text.to_lower()
+	for i in range(data.transitions.size()):
+		var t = data.transitions[i]
+		var text = "%s + %s -> %s" % [t.biome, t.effect, t.result]
+		if filter == "" or text.to_lower().contains(filter):
+			%TransList.add_item(text)
+			%TransList.set_item_metadata(%TransList.get_item_count()-1, i)
+
+func _on_trans_search_changed(_new_text):
+	_refresh_trans_list()
 
 func _on_trans_selected(index):
-	var t = data.transitions[index]
+	var actual_idx = %TransList.get_item_metadata(index)
+	var t = data.transitions[actual_idx]
 	_set_checkbox_id(%TransStartCheckboxes, _find_biome_id(t.biome))
 	_set_option_text(%TransEffect, t.effect)
 	_set_checkbox_id(%TransEndCheckboxes, _find_biome_id(t.result))
@@ -221,7 +264,6 @@ func _on_add_trans_pressed():
 		"effect": %TransEffect.get_item_text(%TransEffect.selected),
 		"result": _find_biome_name(end_id)
 	}
-	# Update or Add
 	var found = false
 	for i in range(data.transitions.size()):
 		var existing = data.transitions[i]
@@ -236,7 +278,8 @@ func _on_add_trans_pressed():
 func _on_delete_trans_pressed():
 	var selected = %TransList.get_selected_items()
 	if selected.size() > 0:
-		data.transitions.remove_at(selected[0])
+		var actual_idx = %TransList.get_item_metadata(selected[0])
+		data.transitions.remove_at(actual_idx)
 		_refresh_trans_list()
 
 # --- Global Save ---
@@ -246,8 +289,3 @@ func _on_save_all_pressed():
 	if file:
 		file.store_string(JSON.stringify(data, "\t"))
 		print("Definitions saved to res://definitions.json")
-		# Force Godot to re-scan the file
-		if Engine.is_editor_hint():
-			var plugin = EditorPlugin.new() # Dummy to get interface if needed, but easier to use scan
-			# EditorInterface is not directly available in global scope but usually through EditorPlugin
-			# For this tool, the notification is enough or manual scan.

@@ -77,6 +77,10 @@ text = "Save Grid"
 layout_mode = 2
 text = "Load Grid"
 
+[node name="ReloadDefBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Reload Definitions"
+
 [node name="Toggles" type="VBoxContainer" parent="CanvasLayer/Control"]
 layout_mode = 1
 anchors_preset = 3
@@ -123,3 +127,4 @@ RMB: Set Player Pos"
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/ScentToggle" to="." method="_on_toggle_scent_toggled"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/BiomeToggle" to="." method="_on_toggle_biome_toggled"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/ImpassableToggle" to="." method="_on_toggle_impassable_toggled"]
+[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/ReloadDefBtn" to="." method="_on_load_definitions_pressed"]

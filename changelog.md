@@ -35,6 +35,10 @@ All notable changes to the Cress project will be documented in this file.
     - Supports Biome configuration (ID, Name, Description) using bitwise mana checkboxes.
     - Includes an Effect Manager to name all 64 bits of the effect stack by byte.
     - Features dedicated panels for managing Annihilation, Chemistry, and Biome Transition rules.
+    - **Search & Filter**: Added real-time search bars and browser lists for biomes, interactions, and transitions.
+- **In-Game Debugging Upgrades**:
+    - **Paint Mode**: Implemented click-and-drag "painting" for compositions, effects (Shift+Drag), and impassable flags (Ctrl+Drag).
+    - **Live Sync**: Added a "Reload Definitions" button to the debug UI to apply simulation rule changes without restarting.
 
 ### Fixed
 - Resolved `static_assert` failure where `Tile` struct was exceeding 16 bytes due to default compiler padding.
