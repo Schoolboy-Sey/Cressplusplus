@@ -93,10 +93,6 @@ unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "Map Name"
 
-[node name="SaveMapBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxC'kljontainer"]
-layout_mode = 2
-text = "Save Map As..."
-
 [node name="MapDropdown" type="OptionButton" parent="CanvasLayer/Control/Panel/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -146,13 +142,15 @@ grow_vertical = 0
 text = "LMB: Select Tile
 RMB: Set Player Pos"
 
+[node name="CanvasLayer_Control_Panel_VBoxC\'kljontainer#SaveMapBtn" type="Button" parent="."]
+text = "Save Map As..."
+
 [connection signal="text_changed" from="CanvasLayer/Control/Panel/VBoxContainer/CompInput" to="." method="_on_comp_input_text_changed"]
 [connection signal="toggled" from="CanvasLayer/Control/Panel/VBoxContainer/ImpassableCheck" to="." method="_on_impassable_check_toggled"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/RunStepBtn" to="." method="_on_run_step_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/RunTurnBtn" to="." method="_on_run_turn_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/SaveBtn" to="." method="_on_save_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/LoadBtn" to="." method="_on_load_pressed"]
-[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/SaveMapBtn" to="." method="_on_save_map_as_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/LoadMapBtn" to="." method="_on_load_map_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/ReloadDefBtn" to="." method="_on_load_definitions_pressed"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/ScentToggle" to="." method="_on_toggle_scent_toggled"]
