@@ -52,6 +52,10 @@ All notable changes to the Cress project will be documented in this file.
     - **Named Saves**: Added ability to save/load maps with custom names to `user://maps/`.
     - **Map Browser**: Integrated a dropdown UI to swap between different testing scenarios instantly.
 
+- **Workflow & Debug UI Improvements**:
+    - **Run Turn**: Added a "Run Turn" button that executes 10 simulation steps sequentially to observe long-term deterministic results.
+    - **Map Name Auto-fill**: Loading a map now automatically populates the "Map Name" field with the loaded file's name for faster iteration and overwriting.
+
 ### Fixed
 - Resolved `static_assert` failure where `Tile` struct was exceeding 16 bytes due to default compiler padding.
 - Added MSVC compatibility for trailing zero counting intrinsics.
