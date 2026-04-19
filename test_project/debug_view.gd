@@ -29,6 +29,7 @@ func _ready():
 	sim.generate_new_world(42)
 	# starting with the smell not displayed. 
 	# sim.run_scent_update(player_pos.x, player_pos.y)
+	_refresh_map_list()
 	queue_redraw()
 
 func _setup_bit_checkboxes():
@@ -57,10 +58,14 @@ func _load_definitions():
 		if json:
 			definitions = json
 			sim.clear_interaction_tables()
+			print("DebugView: Loading %d biomes, %d effects..." % [definitions.biomes.size(), definitions.effects.size()])
 			
 			# Map Biomes
 			for b in definitions.biomes:
 				biome_names[int(b.id)] = b.name
+				if b.has("flammable") and b.flammable:
+					sim.set_flammable(int(b.id), true)
+					print("  Biome %d [%s] marked Flammable" % [int(b.id), b.name])
 				
 			# Map Effects
 			for e in definitions.effects:
@@ -68,28 +73,42 @@ func _load_definitions():
 				effect_names[bit] = e.name
 				effect_dropdown.add_item(e.name, bit)
 				
+			var fire_bit = _get_effect_bit("Fire")
+			if fire_bit != 0:
+				var idx = _get_bit_index(fire_bit)
+				sim.set_propagation_rule(idx, true, false)
+				print("  Fire Rule: Bit %d is active" % idx)
+				
 			# Map Interactions
 			for i in definitions.interactions:
 				if i.type == "annihilation":
 					var bit_a = _get_effect_bit(i.a)
 					var bit_b = _get_effect_bit(i.b)
-					sim.add_annihilation(_get_bit_index(bit_a), _get_bit_index(bit_b))
+					if bit_a != 0 and bit_b != 0:
+						sim.add_annihilation(_get_bit_index(bit_a), _get_bit_index(bit_b))
 				elif i.type == "chemistry":
 					var bit_a = _get_effect_bit(i.a)
 					var bit_b = _get_effect_bit(i.b)
 					var res_bit = _get_effect_bit(i.result)
-					sim.add_chemistry(_get_bit_index(bit_a), _get_bit_index(bit_b), res_bit)
+					if bit_a != 0 and bit_b != 0 and res_bit != 0:
+						sim.add_chemistry(_get_bit_index(bit_a), _get_bit_index(bit_b), res_bit)
 			
 			# Map Transitions
+			var trans_count = 0
 			for t in definitions.transitions:
 				var b_id = _get_biome_id(t.biome)
 				var e_bit = _get_effect_bit(t.effect)
 				var res_b = _get_biome_id(t.result)
-				sim.add_biome_transition(b_id, _get_bit_index(e_bit), res_b)
+				# Important: only add if we found the IDs
+				if e_bit != 0:
+					sim.add_biome_transition(b_id, _get_bit_index(e_bit), res_b)
+					trans_count += 1
+			print("DebugView: Loaded %d valid transitions." % trans_count)
 
-func _get_effect_bit(name: String) -> int:
+func _get_effect_bit(effect_name: String) -> int:
 	for e in definitions.effects:
-		if e.name == name: return e.bit
+		if e.name.strip_edges().to_lower() == effect_name.strip_edges().to_lower():
+			return int(e.bit)
 	return 0
 
 func _get_bit_index(bit: int) -> int:
@@ -97,21 +116,26 @@ func _get_bit_index(bit: int) -> int:
 		if bit == (1 << i): return i
 	return 0
 
-func _get_biome_id(name: String) -> int:
+func _get_biome_id(biome_name: String) -> int:
 	for b in definitions.biomes:
-		if b.name == name: return b.id
+		if b.name.strip_edges().to_lower() == biome_name.strip_edges().to_lower():
+			return int(b.id)
 	return 0
 
 func _input(event):
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
-			is_painting = event.pressed
 			if event.pressed:
 				var grid_pos = Vector2i(event.position / tile_size)
 				if _is_valid_pos(grid_pos):
+					is_painting = true
 					selected_tile = grid_pos
 					_update_ui()
 					queue_redraw()
+				else:
+					is_painting = false
+			else:
+				is_painting = false
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			var grid_pos = Vector2i(event.position / tile_size)
 			if _is_valid_pos(grid_pos):
@@ -167,6 +191,12 @@ func _on_run_step_pressed():
 	sim.run_scent_update(player_pos.x, player_pos.y)
 	queue_redraw()
 
+func _on_run_turn_pressed():
+	for i in range(10):
+		sim.run_step()
+	sim.run_scent_update(player_pos.x, player_pos.y)
+	queue_redraw()
+
 func _on_comp_input_text_changed(new_text):
 	if selected_tile.x != -1:
 		sim.set_tile_composition(selected_tile.x, selected_tile.y, int(new_text))
@@ -178,6 +208,77 @@ func _on_impassable_check_toggled(button_pressed):
 		sim.set_impassable(selected_tile.x, selected_tile.y, button_pressed)
 		sim.run_scent_update(player_pos.x, player_pos.y)
 		queue_redraw()
+
+func _refresh_map_list():
+	%MapDropdown.clear()
+	var dir = DirAccess.open("user://")
+	if not dir.dir_exists("maps"):
+		dir.make_dir("maps")
+	
+	dir = DirAccess.open("user://maps")
+	if dir:
+		dir.list_dir_begin()
+		var file_name = dir.get_next()
+		while file_name != "":
+			if not dir.current_is_dir() and file_name.ends_with(".json"):
+				%MapDropdown.add_item(file_name)
+			file_name = dir.get_next()
+
+func _on_save_map_as_pressed():
+	var map_name = %MapNameInput.text
+	if map_name == "":
+		print("Error: No map name provided")
+		return
+	
+	if not map_name.ends_with(".json"):
+		map_name += ".json"
+		
+	var data = {
+		"width": sim.map_width,
+		"height": sim.map_height,
+		"player": {"x": player_pos.x, "y": player_pos.y},
+		"tiles": []
+	}
+	for z in range(sim.map_height):
+		for x in range(sim.map_width):
+			var tile = {
+				"x": x, "z": z,
+				"comp": sim.get_tile_composition(x, z),
+				"imp": sim.is_impassable(x, z),
+				"eff": sim.get_tile_effects(x, z)
+			}
+			if tile.comp != 0 or tile.imp or tile.eff != 0:
+				data.tiles.append(tile)
+	
+	var file = FileAccess.open("user://maps/" + map_name, FileAccess.WRITE)
+	file.store_string(JSON.stringify(data))
+	print("Saved to user://maps/" + map_name)
+	_refresh_map_list()
+
+func _on_load_map_pressed():
+	var idx = %MapDropdown.selected
+	if idx == -1:
+		print("Error: No map selected")
+		return
+		
+	var map_name = %MapDropdown.get_item_text(idx)
+	var file = FileAccess.open("user://maps/" + map_name, FileAccess.READ)
+	if not file:
+		print("Error: Could not open map " + map_name)
+		return
+		
+	var data = JSON.parse_string(file.get_as_text())
+	
+	sim.generate_new_world(0) # Clear
+	player_pos = Vector2i(data.player.x, data.player.y)
+	
+	for t in data.tiles:
+		sim.set_tile_composition(t.x, t.z, t.comp)
+		sim.set_impassable(t.x, t.z, t.imp)
+		sim.set_tile_effect(t.x, t.z, int(t.eff))
+	
+	sim.run_scent_update(player_pos.x, player_pos.y)
+	queue_redraw()
 
 func _on_save_pressed():
 	var data = {

@@ -15,16 +15,35 @@ protected:
 
 private:
     std::vector<Tile> grid;
+    std::vector<uint64_t> propagation_buffer;
+    std::vector<int> active_tiles; // Indices of tiles with effects
+    std::vector<bool> is_active_map; // Bitmask for fast index existence check
     int map_width = 32;
     int map_height = 32;
 
-    // LUTs for Branchless ALU
+    void _mark_tile_active(int index);
+
+    // LUTs for Branchless ALU and Physics
     uint64_t annihilation_matrix[64];
     uint64_t chemistry_pairs[64][64];
+    uint8_t flammability_lut[256];
     uint8_t biome_transitions[256][64]; // Maps [BiomeID][EffectBitIndex] -> NewBiomeID
 
+    // Propagation Rules
+    struct PropagationRule {
+        bool active = false;
+        bool check_flammability = false;
+        bool check_elevation = false;
+        uint64_t bit = 0;
+    };
+    PropagationRule propagation_rules[64];
+
     void update_scent(int player_x, int player_z);
-    void process_tile_alu(Tile &tile);
+    void _resolve_internal_alu(Tile &tile);
+    void _resolve_transitions(Tile &tile);
+    void _process_propagation_sparse(const std::vector<int>& active_indices);
+    void _apply_propagation();
+    void _inject_biome_effects();
 
 public:
     SimulationManager();
@@ -47,6 +66,8 @@ public:
     void add_annihilation(int bit_a, int bit_b);
     void add_chemistry(int bit_a, int bit_b, uint64_t result_stack);
     void add_biome_transition(uint8_t biome_id, int effect_bit, uint8_t result_biome_id);
+    void set_flammable(int biome_id, bool flammable);
+    void set_propagation_rule(int bit_index, bool check_flammable, bool check_elevation);
     
     int get_map_width() const { return map_width; }
     int get_map_height() const { return map_height; }

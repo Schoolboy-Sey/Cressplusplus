@@ -40,6 +40,8 @@ void SimulationManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("add_annihilation", "bit_a", "bit_b"), &SimulationManager::add_annihilation);
     ClassDB::bind_method(D_METHOD("add_chemistry", "bit_a", "bit_b", "result_stack"), &SimulationManager::add_chemistry);
     ClassDB::bind_method(D_METHOD("add_biome_transition", "biome_id", "effect_bit", "result_biome_id"), &SimulationManager::add_biome_transition);
+    ClassDB::bind_method(D_METHOD("set_flammable", "biome_id", "flammable"), &SimulationManager::set_flammable);
+    ClassDB::bind_method(D_METHOD("set_propagation_rule", "bit_index", "check_flammable", "check_elevation"), &SimulationManager::set_propagation_rule);
 
     ClassDB::bind_method(D_METHOD("get_map_width"), &SimulationManager::get_map_width);
     ClassDB::bind_method(D_METHOD("get_map_height"), &SimulationManager::get_map_height);
@@ -49,25 +51,48 @@ void SimulationManager::_bind_methods() {
 }
 
 SimulationManager::SimulationManager() {
-    grid.resize(map_width * map_height);
+    int size = map_width * map_height;
+    grid.resize(size);
+    propagation_buffer.resize(size);
+    is_active_map.assign(size, false);
+    active_tiles.reserve(size / 10);
     clear_interaction_tables();
 }
 
 SimulationManager::~SimulationManager() {}
 
-void SimulationManager::run_step() {
-    for (auto &tile : grid) {
-        if (tile.effect_stack != 0) {
-            process_tile_alu(tile);
+void SimulationManager::_mark_tile_active(int index) {
+    if (index >= 0 && index < (int)is_active_map.size()) {
+        if (!is_active_map[index]) {
+            is_active_map[index] = true;
+            active_tiles.push_back(index);
         }
     }
 }
 
-void SimulationManager::process_tile_alu(Tile &tile) {
+void SimulationManager::run_step() {
+    std::vector<int> current_active = active_tiles;
+    active_tiles.clear();
+    std::fill(is_active_map.begin(), is_active_map.end(), false);
+
+    for (int index : current_active) {
+        _resolve_internal_alu(grid[index]);
+    }
+
+    _process_propagation_sparse(current_active);
+
+    for (int index : current_active) {
+        _resolve_transitions(grid[index]);
+    }
+
+    _inject_biome_effects();
+    _apply_propagation();
+}
+
+void SimulationManager::_resolve_internal_alu(Tile &tile) {
     uint64_t remaining_stack = tile.effect_stack;
     uint64_t iterator_mask = tile.effect_stack;
 
-    // Phase 1: Annihilation
     while (iterator_mask != 0) {
         int bit = __builtin_ctzll(iterator_mask);
         uint64_t bit_mask = 1ULL << bit;
@@ -76,15 +101,13 @@ void SimulationManager::process_tile_alu(Tile &tile) {
             uint64_t targets = annihilation_matrix[bit];
             uint64_t actual_hits = remaining_stack & targets;
 
-            if (actual_hits != 0) {
-                remaining_stack &= ~actual_hits;
-                remaining_stack &= ~bit_mask;
-            }
+            uint64_t hits_mask = -static_cast<int64_t>(actual_hits != 0);
+            remaining_stack &= ~(actual_hits & hits_mask);
+            remaining_stack &= ~(bit_mask & hits_mask);
         }
         iterator_mask &= ~(1ULL << bit);
     }
 
-    // Phase 2: Chemistry
     iterator_mask = remaining_stack;
     while (iterator_mask != 0) {
         int bit_a = __builtin_ctzll(iterator_mask);
@@ -108,27 +131,98 @@ void SimulationManager::process_tile_alu(Tile &tile) {
         }
         iterator_mask &= ~mask_a;
     }
+    
+    tile.effect_stack = remaining_stack;
+}
 
-    // Phase 3: Biome Transitions
-    iterator_mask = remaining_stack;
+void SimulationManager::_resolve_transitions(Tile &tile) {
+    uint64_t iterator_mask = tile.effect_stack;
     while (iterator_mask != 0) {
         int bit = __builtin_ctzll(iterator_mask);
-        uint8_t next_biome = biome_transitions[tile.composition][bit];
-        if (next_biome != tile.composition) {
-            tile.composition = next_biome;
-        }
+        tile.composition = biome_transitions[tile.composition][bit];
         iterator_mask &= ~(1ULL << bit);
     }
-
-    // WIPE THE STACK
     tile.effect_stack = 0;
+}
+
+void SimulationManager::_inject_biome_effects() {}
+
+void SimulationManager::_process_propagation_sparse(const std::vector<int>& active_indices) {
+    memset(propagation_buffer.data(), 0, propagation_buffer.size() * sizeof(uint64_t));
+
+    for (int index : active_indices) {
+        uint64_t stack = grid[index].effect_stack;
+        if (stack == 0) continue;
+
+        int x = index % map_width;
+        int z = index / map_width;
+        uint8_t current_elev = grid[index].elevation;
+        uint64_t iterator = stack;
+
+        while (iterator != 0) {
+            int bit_idx = __builtin_ctzll(iterator);
+            uint64_t bit_mask = 1ULL << bit_idx;
+            const PropagationRule &rule = propagation_rules[bit_idx];
+            
+            if (rule.active) {
+                uint8_t f_req_mask = rule.check_flammability ? 0xFF : 0x00;
+                uint8_t e_req_mask = rule.check_elevation ? 0xFF : 0x00;
+
+                auto spread_to = [&](int nx, int nz) {
+                    if (nx >= 0 && nx < map_width && nz >= 0 && nz < map_height) {
+                        int n_idx = nz * map_width + nx;
+                        const Tile &neighbor = grid[n_idx];
+
+                        uint8_t is_f = flammability_lut[neighbor.composition];
+                        uint8_t is_e = (neighbor.elevation <= current_elev) ? 0xFF : 0x00;
+
+                        uint8_t res_f = (is_f & f_req_mask) | ~f_req_mask;
+                        uint8_t res_e = (is_e & e_req_mask) | ~e_req_mask;
+
+                        uint64_t final_mask = -static_cast<int64_t>((res_f & res_e) != 0);
+                        propagation_buffer[n_idx] |= (bit_mask & final_mask);
+                    }
+                };
+
+                spread_to(x + 1, z);
+                spread_to(x - 1, z);
+                spread_to(x, z + 1);
+                spread_to(x, z - 1);
+            }
+            iterator &= ~bit_mask;
+        }
+    }
+}
+
+void SimulationManager::_apply_propagation() {
+    for (size_t i = 0; i < grid.size(); ++i) {
+        uint64_t pushed_bits = propagation_buffer[i];
+        if (pushed_bits != 0) {
+            grid[i].effect_stack |= pushed_bits;
+            _mark_tile_active((int)i);
+        }
+    }
+}
+
+void SimulationManager::set_flammable(int biome_id, bool flammable) {
+    if (biome_id >= 0 && biome_id < 256) {
+        flammability_lut[biome_id] = flammable ? 0xFF : 0x00;
+    }
+}
+
+void SimulationManager::set_propagation_rule(int bit_index, bool check_flammable, bool check_elevation) {
+    if (bit_index >= 0 && bit_index < 64) {
+        propagation_rules[bit_index].active = true;
+        propagation_rules[bit_index].check_flammability = check_flammable;
+        propagation_rules[bit_index].check_elevation = check_elevation;
+        propagation_rules[bit_index].bit = 1ULL << bit_index;
+    }
 }
 
 void SimulationManager::generate_new_world(int seed) {
     grid.assign(map_width * map_height, Tile{0, 0, 0, 0, 0, 0, {0, 0, 0}});
-    for (int i = 0; i < 10; ++i) {
-        set_impassable(10, 10 + i, true);
-    }
+    active_tiles.clear();
+    is_active_map.assign(map_width * map_height, false);
 }
 
 void SimulationManager::set_tile_composition(int x, int z, uint8_t composition) {
@@ -146,7 +240,9 @@ uint8_t SimulationManager::get_tile_composition(int x, int z) const {
 
 void SimulationManager::set_tile_effect(int x, int z, uint64_t effect_bit) {
     if (x >= 0 && x < map_width && z >= 0 && z < map_height) {
-        grid[z * map_width + x].effect_stack |= effect_bit;
+        int index = z * map_width + x;
+        grid[index].effect_stack |= effect_bit;
+        _mark_tile_active(index);
     }
 }
 
@@ -178,6 +274,10 @@ bool SimulationManager::is_impassable(int x, int z) const {
 void SimulationManager::clear_interaction_tables() {
     memset(annihilation_matrix, 0, sizeof(annihilation_matrix));
     memset(chemistry_pairs, 0, sizeof(chemistry_pairs));
+    memset(flammability_lut, 0, sizeof(flammability_lut));
+    for (int i = 0; i < 64; ++i) {
+        propagation_rules[i] = PropagationRule();
+    }
     for (int b = 0; b < 256; ++b) {
         for (int e = 0; e < 64; ++e) {
             biome_transitions[b][e] = (uint8_t)b;
@@ -283,4 +383,3 @@ String SimulationManager::get_scent_map_string() const {
     }
     return res;
 }
-

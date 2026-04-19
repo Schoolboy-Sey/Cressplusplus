@@ -9,6 +9,7 @@
 ## **1\. MEMORY MAP (The 16-Byte Coordinate)**
 
 Every physical coordinate on the map is represented by exactly 16 bytes. There are no object-oriented "Tile" classes.
+In every instance, branchless c++ functions must be used where it is the most efficient option.
 
 ### **Byte 1: The Static State (uint8\_t)**
 

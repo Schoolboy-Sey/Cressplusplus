@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://dkygak8lv7yxa"]
 
-[ext_resource type="Script" path="res://debug_view.gd" id="1_scen1"]
+[ext_resource type="Script" uid="uid://dhkcj35oecvav" path="res://debug_view.gd" id="1_scen1"]
 
 [node name="DebugView" type="Node2D"]
 script = ExtResource("1_scen1")
@@ -66,6 +66,10 @@ layout_mode = 2
 layout_mode = 2
 text = "Run Step"
 
+[node name="RunTurnBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Run Turn (10 Steps)"
+
 [node name="HSeparator" type="HSeparator" parent="CanvasLayer/Control/Panel/VBoxContainer"]
 layout_mode = 2
 
@@ -76,6 +80,30 @@ text = "Save Grid"
 [node name="LoadBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
 layout_mode = 2
 text = "Load Grid"
+
+[node name="HSeparator2" type="HSeparator" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+
+[node name="MapLabel" type="Label" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Map Management"
+
+[node name="MapNameInput" type="LineEdit" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Map Name"
+
+[node name="SaveMapBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Save Map As..."
+
+[node name="MapDropdown" type="OptionButton" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="LoadMapBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Load Selected Map"
 
 [node name="ReloadDefBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
 layout_mode = 2
@@ -95,7 +123,6 @@ grow_vertical = 0
 
 [node name="ScentToggle" type="CheckButton" parent="CanvasLayer/Control/Toggles"]
 layout_mode = 2
-button_pressed = false
 text = "Show Scent"
 
 [node name="BiomeToggle" type="CheckButton" parent="CanvasLayer/Control/Toggles"]
@@ -122,9 +149,12 @@ RMB: Set Player Pos"
 [connection signal="text_changed" from="CanvasLayer/Control/Panel/VBoxContainer/CompInput" to="." method="_on_comp_input_text_changed"]
 [connection signal="toggled" from="CanvasLayer/Control/Panel/VBoxContainer/ImpassableCheck" to="." method="_on_impassable_check_toggled"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/RunStepBtn" to="." method="_on_run_step_pressed"]
+[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/RunTurnBtn" to="." method="_on_run_turn_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/SaveBtn" to="." method="_on_save_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/LoadBtn" to="." method="_on_load_pressed"]
+[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/SaveMapBtn" to="." method="_on_save_map_as_pressed"]
+[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/LoadMapBtn" to="." method="_on_load_map_pressed"]
+[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/ReloadDefBtn" to="." method="_on_load_definitions_pressed"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/ScentToggle" to="." method="_on_toggle_scent_toggled"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/BiomeToggle" to="." method="_on_toggle_biome_toggled"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/ImpassableToggle" to="." method="_on_toggle_impassable_toggled"]
-[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/ReloadDefBtn" to="." method="_on_load_definitions_pressed"]

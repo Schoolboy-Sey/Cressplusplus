@@ -99,28 +99,37 @@ func _on_biome_checkbox_changed(_toggled):
 	%BiomeIDLabel.text = "Target ID: %d" % id
 	%BiomeNameInput.text = ""
 	%BiomeDescInput.text = ""
+	%BiomeFlammableCheck.button_pressed = false
 	for b in data.biomes:
 		if int(b.id) == id:
 			%BiomeNameInput.text = b.name
 			if b.has("desc"):
 				%BiomeDescInput.text = b.desc
+			if b.has("flammable"):
+				%BiomeFlammableCheck.button_pressed = b.flammable
 			break
 
 func _on_update_biome_pressed():
 	var id = _get_checkbox_id(%BiomeCheckboxes)
 	var b_name = %BiomeNameInput.text
 	var b_desc = %BiomeDescInput.text
+	var b_flammable = %BiomeFlammableCheck.button_pressed
 	var found = false
 	for b in data.biomes:
 		if int(b.id) == id:
 			b.name = b_name
 			if b_desc != "": b.desc = b_desc
 			elif b.has("desc"): b.erase("desc")
+			
+			if b_flammable: b.flammable = true
+			elif b.has("flammable"): b.erase("flammable")
+			
 			found = true
 			break
 	if not found:
 		var new_biome = {"id": id, "name": b_name}
 		if b_desc != "": new_biome["desc"] = b_desc
+		if b_flammable: new_biome["flammable"] = true
 		data.biomes.append(new_biome)
 	
 	_refresh_biome_list()
@@ -285,7 +294,34 @@ func _on_delete_trans_pressed():
 # --- Global Save ---
 
 func _on_save_all_pressed():
-	var file = FileAccess.open("res://definitions.json", FileAccess.WRITE)
+	# Use absolute path to bypass res:// resolution issues in some environments
+	var abs_path = ProjectSettings.globalize_path("res://definitions.json")
+	print("DefinitionEditor: Target path: ", abs_path)
+
+	# Verification log before saving
+	for b in data.biomes:
+		if b.has("flammable") and b.flammable:
+			print("DefinitionEditor: PRE-SAVE VALIDATION: Biome %d is FLAMMABLE" % int(b.id))
+
+	var file = FileAccess.open(abs_path, FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify(data, "\t"))
-		print("Definitions saved to res://definitions.json")
+		var json_str = JSON.stringify(data, "\t")
+		file.store_string(json_str)
+		file.flush()
+		file.close()
+		print("DefinitionEditor: File definitely written to disk.")
+		
+		# Immediate re-read to verify disk state
+		var verify_file = FileAccess.open(abs_path, FileAccess.READ)
+		if verify_file:
+			var content = verify_file.get_as_text()
+			if content.contains("\"flammable\": true"):
+				print("DefinitionEditor: VERIFIED ON DISK: Raw text contains 'flammable: true'")
+			else:
+				printerr("DefinitionEditor: VERIFICATION FAILED! 'flammable: true' missing from raw text.")
+			verify_file.close()
+			
+		# Force Godot to notice the change
+		EditorInterface.get_resource_filesystem().scan()
+	else:
+		printerr("DefinitionEditor: FAILED to open definitions.json for writing!")

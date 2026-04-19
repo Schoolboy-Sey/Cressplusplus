@@ -40,6 +40,18 @@ All notable changes to the Cress project will be documented in this file.
     - **Paint Mode**: Implemented click-and-drag "painting" for compositions, effects (Shift+Drag), and impassable flags (Ctrl+Drag).
     - **Live Sync**: Added a "Reload Definitions" button to the debug UI to apply simulation rule changes without restarting.
 
+- **High-Performance Propagation Engine**:
+    - **Phase 6: Propagation**: Implemented a double-buffered spread system using a `propagation_buffer`.
+    - **Deterministic Decay**: Fire and other elements now spread exactly one tile per simulation step.
+    - **Propagation LUTs**: Added `flammability_lut` and `PropagationRule` structures to configure complex spread logic (Elevation, Flammability, etc.) in C++.
+- **Branchless ALU Refactor**:
+    - Optimized core simulation passes using **Two's Complement Masking** to eliminate conditional jumps.
+    - **Blind Transitions**: Biome changes now use direct LUT assignments, avoiding "if-changed" logic.
+    - **Unrolled Neighbor Checks**: Manually unrolled 4-way BFS and propagation loops for maximum instruction pipelining.
+- **Enhanced Map Management**:
+    - **Named Saves**: Added ability to save/load maps with custom names to `user://maps/`.
+    - **Map Browser**: Integrated a dropdown UI to swap between different testing scenarios instantly.
+
 ### Fixed
 - Resolved `static_assert` failure where `Tile` struct was exceeding 16 bytes due to default compiler padding.
 - Added MSVC compatibility for trailing zero counting intrinsics.
@@ -47,3 +59,5 @@ All notable changes to the Cress project will be documented in this file.
 - **Fixed JSON Dictionary Lookups**: Added explicit `int()` casts for biome IDs and effect bits in `debug_view.gd` to prevent float-key mismatches from Godot's JSON parser.
 - **Improved UI Selection**: Updated `debug_view.gd` to draw the white selection square last, ensuring it's always visible on top of all layers.
 - **UI Descriptions**: Added a dynamic description field to the Biome editor in the "Definition Editor" addon.
+- **Paint Safety**: Fixed a bug where painting could be initiated by clicking outside the grid boundaries.
+- **Propagation Timing**: Refactored `run_step` to strictly separate the "Current Turn ALU" from the "Next Turn Spread," resolving a bug where fire would spread and disappear in a single step.

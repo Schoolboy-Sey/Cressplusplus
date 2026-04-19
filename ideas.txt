@@ -1,0 +1,15 @@
+# Cress Performance & Scaling Ideas
+
+### 1. Memory & Cache Layout
+- **Z-Order Curve (Morton Encoding)**: Rearrange the 1D grid array so that (x, y) neighbors are physically closer in memory. This reduces cache misses during North/South neighbor checks in propagation.
+- **Vulkan Storage Buffers**: Bypassing the `PackedByteArray` copy by letting the GPU read the C++ memory directly for rendering.
+
+### 2. Algorithmic Optimizations
+- **Active Tile List (Sparse Processing)**: Instead of three full passes over the grid, maintain a list of indices that actually contain active effects. Only process these tiles and their immediate neighbors.
+- **SIMD (AVX-512/AVX2)**: Process 4 or 8 tiles simultaneously using Single Instruction Multiple Data. The 16-byte tile size is perfectly suited for alignment with 256-bit or 512-bit registers.
+- **Jump Flooding / Parallel BFS**: For scent propagation, explore jump flooding algorithms if the map size grows beyond what the current BFS queue can handle at 60fps.
+
+### 3. Scaling Milestones
+- **Current Architecture**: Handles 10k-50k tiles easily.
+- **Sparse Architecture**: Targeting 1M tiles at 60 FPS by skipping static "empty" biomes.
+- **GPU Offloading**: Using Compute Shaders for the ALU if the interaction rules become complex enough that the CPU cannot keep up with 1M+ tiles.
