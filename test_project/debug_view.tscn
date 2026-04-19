@@ -95,7 +95,7 @@ grow_vertical = 0
 
 [node name="ScentToggle" type="CheckButton" parent="CanvasLayer/Control/Toggles"]
 layout_mode = 2
-button_pressed = true
+button_pressed = false
 text = "Show Scent"
 
 [node name="BiomeToggle" type="CheckButton" parent="CanvasLayer/Control/Toggles"]

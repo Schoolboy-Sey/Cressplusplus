@@ -71,7 +71,7 @@
     "__pycache__": true,
     "gen": true,
     "bin":true,
-    "test_project":true,
+    "test_project":false,
     "tools":true,
     ".clang-format": true,
     ".editorconfig": true,
@@ -94,5 +94,6 @@
     "setup.py":false
 },
   "files.eol": "\n",
-  "files.insertFinalNewline": true
+  "files.insertFinalNewline": true,
+  "godotTools.editorPath.godot4": "c:\\Users\\sethw\\Downloads\\Godot_v4.5-stable_win64.exe\\Godot_v4.5-stable_win64.exe"
 }

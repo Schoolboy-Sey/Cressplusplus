@@ -27,7 +27,8 @@ func _ready():
 	_load_definitions()
 	_setup_bit_checkboxes()
 	sim.generate_new_world(42)
-	sim.run_scent_update(player_pos.x, player_pos.y)
+	# starting with the smell not displayed. 
+	# sim.run_scent_update(player_pos.x, player_pos.y)
 	queue_redraw()
 
 func _setup_bit_checkboxes():
