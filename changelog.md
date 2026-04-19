@@ -55,6 +55,13 @@ All notable changes to the Cress project will be documented in this file.
 - **Workflow & Debug UI Improvements**:
     - **Run Turn**: Added a "Run Turn" button that executes 10 simulation steps sequentially to observe long-term deterministic results.
     - **Map Name Auto-fill**: Loading a map now automatically populates the "Map Name" field with the loaded file's name for faster iteration and overwriting.
+- **Sparse Propagation & Sparse Updates**:
+    - **Performance Optimization**: Replaced full-grid scans with an `active_tiles` list and `dirty_propagation_indices`. The simulation now only processes tiles that contain active effects or are affected by spread.
+    - **Scaling**: Targeted to handle up to 1,000,000 tiles by skipping hundreds of thousands of "static/empty" tiles per frame.
+- **"Slow Burn" Pacing & Persistence**:
+    - **Heat Thresholds**: Implemented smolder countdowns (7 steps) using Byte 12 timer bits. Effects must "build up" on a tile before jumping to neighbors.
+    - **Spread Intervals**: Added `set_propagation_interval` to configure effect-specific speed (e.g., Fire spreads every 4 steps, Water spreads every 1).
+    - **Fuel-Aware Persistence**: Effects now strictly extinguish if their host biome transforms into a non-flammable state (e.g., Forest -> Dirt consumes the fire fuel).
 
 ### Fixed
 - Resolved `static_assert` failure where `Tile` struct was exceeding 16 bytes due to default compiler padding.

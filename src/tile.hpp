@@ -41,6 +41,16 @@ struct Tile {
     bool is_impassable() const {
         return (pathing_scent & FLAG_IMPASSABLE) != 0;
     }
+
+    // Byte 12 Timer Helpers (Bits 56-58 of effect_stack)
+    // We treat 0 as "Trigger" and 1-7 as "Remaining Steps"
+    uint8_t get_countdown() const {
+        return static_cast<uint8_t>((effect_stack >> 56) & 0x7);
+    }
+
+    void set_countdown(uint8_t val) {
+        effect_stack = (effect_stack & ~(0x7ULL << 56)) | (static_cast<uint64_t>(val & 0x7) << 56);
+    }
 };
 #pragma pack(pop)
 static_assert(sizeof(Tile) == 16, "Tile must be exactly 16 bytes.");

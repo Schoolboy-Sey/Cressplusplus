@@ -1,6 +1,5 @@
 #include "simulation_manager.hpp"
 #include "godot_cpp/core/class_db.hpp"
-#include "godot_cpp/variant/utility_functions.hpp"
 #include <queue>
 #include <cstring> // For memset and memcpy
 #include <immintrin.h> // For intrinsics
@@ -43,6 +42,7 @@ void SimulationManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("add_biome_transition", "biome_id", "effect_bit", "result_biome_id"), &SimulationManager::add_biome_transition);
     ClassDB::bind_method(D_METHOD("set_flammable", "biome_id", "flammable"), &SimulationManager::set_flammable);
     ClassDB::bind_method(D_METHOD("set_propagation_rule", "bit_index", "check_flammable", "check_elevation"), &SimulationManager::set_propagation_rule);
+    ClassDB::bind_method(D_METHOD("set_propagation_interval", "bit_index", "interval"), &SimulationManager::set_propagation_interval);
 
     ClassDB::bind_method(D_METHOD("get_map_width"), &SimulationManager::get_map_width);
     ClassDB::bind_method(D_METHOD("get_map_height"), &SimulationManager::get_map_height);
@@ -84,12 +84,14 @@ void SimulationManager::_push_to_buffer(int index, uint64_t mask) {
 }
 
 void SimulationManager::run_step() {
+    step_count++;
+
     // Collect tiles that are active THIS turn
     std::vector<int> current_active = active_tiles;
     active_tiles.clear();
     std::fill(is_active_map.begin(), is_active_map.end(), false);
 
-    // 1. Resolve internal Chemistry/Annihilation
+    // 1. Resolve internal Chemistry/Annihilation and Timers
     for (int index : current_active) {
         _resolve_internal_alu(grid[index]);
     }
@@ -102,10 +104,7 @@ void SimulationManager::run_step() {
         _resolve_transitions(grid[index]);
     }
 
-    // 4. Inject bits from biomes
     _inject_biome_effects();
-
-    // 5. Apply Buffer to next turn's active list
     _apply_propagation();
 }
 
@@ -113,6 +112,7 @@ void SimulationManager::_resolve_internal_alu(Tile &tile) {
     uint64_t remaining_stack = tile.effect_stack;
     uint64_t iterator_mask = tile.effect_stack;
 
+    // Phase 1: Annihilation
     while (iterator_mask != 0) {
         int bit = ctz64(iterator_mask);
         uint64_t bit_mask = 1ULL << bit;
@@ -128,6 +128,7 @@ void SimulationManager::_resolve_internal_alu(Tile &tile) {
         iterator_mask &= ~(1ULL << bit);
     }
 
+    // Phase 2: Chemistry
     iterator_mask = remaining_stack;
     while (iterator_mask != 0) {
         int bit_a = ctz64(iterator_mask);
@@ -152,22 +153,45 @@ void SimulationManager::_resolve_internal_alu(Tile &tile) {
         iterator_mask &= ~mask_a;
     }
     
+    // Phase 3: Ignition Ticks (Decrement Countdown if effects present)
+    if (remaining_stack & 0x00FFFFFFFFFFFFFFULL) { // Any element bit 0-55
+        uint8_t count = tile.get_countdown();
+        if (count > 0) {
+            count--;
+            tile.set_countdown(count);
+            // Update remaining_stack to match tile.effect_stack for wipe preservation
+            remaining_stack = (remaining_stack & 0x00FFFFFFFFFFFFFFULL) | (tile.effect_stack & 0xFF00000000000000ULL);
+        }
+    }
+
     tile.effect_stack = remaining_stack;
 }
 
 void SimulationManager::_resolve_transitions(Tile &tile) {
-    uint64_t iterator_mask = tile.effect_stack;
+    uint8_t countdown = tile.get_countdown();
+    uint64_t iterator_mask = tile.effect_stack & 0x00FFFFFFFFFFFFFFULL;
+
     while (iterator_mask != 0) {
         int bit = ctz64(iterator_mask);
-        tile.composition = biome_transitions[tile.composition][bit];
+        uint8_t next_biome = biome_transitions[tile.composition][bit];
+        
+        // Transition only triggers if countdown is 0
+        uint8_t target = (countdown == 0) ? next_biome : tile.composition;
+        tile.composition = target;
+
         iterator_mask &= ~(1ULL << bit);
     }
-    tile.effect_stack = 0;
+
+    // WIPE THE STACK but preserve top bits (56-63: Timer, Entity, Item)
+    tile.effect_stack &= (0xFFULL << 56);
+    
+    // If transition happened (countdown was 0), reset timer to default (7) for next event
+    if (countdown == 0) {
+        tile.set_countdown(7);
+    }
 }
 
-void SimulationManager::_inject_biome_effects() {
-    // Future expansion: INJECTION_LUT
-}
+void SimulationManager::_inject_biome_effects() {}
 
 void SimulationManager::_process_propagation_sparse(const std::vector<int>& active_indices) {
     for (int index : active_indices) {
@@ -177,37 +201,60 @@ void SimulationManager::_process_propagation_sparse(const std::vector<int>& acti
         int x = index % map_width;
         int z = index / map_width;
         uint8_t current_elev = grid[index].elevation;
+        uint8_t countdown = grid[index].get_countdown();
         uint64_t iterator = stack;
 
         while (iterator != 0) {
             int bit_idx = ctz64(iterator);
             uint64_t bit_mask = 1ULL << bit_idx;
-            const PropagationRule &rule = propagation_rules[bit_idx];
             
+            if (bit_idx >= 56) {
+                iterator &= ~bit_mask;
+                continue;
+            }
+
+            const PropagationRule &rule = propagation_rules[bit_idx];
+
             if (rule.active) {
-                uint8_t f_req_mask = rule.check_flammability ? 0xFF : 0x00;
-                uint8_t e_req_mask = rule.check_elevation ? 0xFF : 0x00;
+                // 1. FUEL-AWARE PERSISTENCE: 
+                // Only stay if fuel remains AND biome is still flammable
+                uint8_t current_comp = grid[index].composition;
+                uint8_t next_b = biome_transitions[current_comp][bit_idx];
+                bool is_f = (flammability_lut[current_comp] != 0);
+                
+                if (is_f && (countdown > 0 || next_b == current_comp)) {
+                    _push_to_buffer(index, bit_mask);
+                }
 
-                auto spread_to = [&](int nx, int nz) {
-                    if (nx >= 0 && nx < map_width && nz >= 0 && nz < map_height) {
-                        int n_idx = nz * map_width + nx;
-                        const Tile &neighbor = grid[n_idx];
+                // 2. THROTTLED NEIGHBOR SPREAD: 
+                // Only spread if global step matches AND smoldered enough (countdown building up)
+                if ((step_count % rule.spread_interval == 0) && (countdown <= 3)) {
+                    uint8_t f_req_mask = rule.check_flammability ? 0xFF : 0x00;
+                    uint8_t e_req_mask = rule.check_elevation ? 0xFF : 0x00;
 
-                        uint8_t is_f = flammability_lut[neighbor.composition];
-                        uint8_t is_e = (neighbor.elevation <= current_elev) ? 0xFF : 0x00;
+                    auto spread_to = [&](int nx, int nz) {
+                        if (nx >= 0 && nx < map_width && nz >= 0 && nz < map_height) {
+                            int n_idx = nz * map_width + nx;
+                            const Tile &neighbor = grid[n_idx];
 
-                        uint8_t res_f = (is_f & f_req_mask) | ~f_req_mask;
-                        uint8_t res_e = (is_e & e_req_mask) | ~e_req_mask;
+                            uint8_t n_is_f = flammability_lut[neighbor.composition];
+                            uint8_t n_is_e = (neighbor.elevation <= current_elev) ? 0xFF : 0x00;
 
-                        uint64_t final_mask = -static_cast<int64_t>((res_f & res_e) != 0);
-                        _push_to_buffer(n_idx, bit_mask & final_mask);
-                    }
-                };
+                            uint8_t res_f = (n_is_f & f_req_mask) | ~f_req_mask;
+                            uint8_t res_e = (n_is_e & e_req_mask) | ~e_req_mask;
 
-                spread_to(x + 1, z);
-                spread_to(x - 1, z);
-                spread_to(x, z + 1);
-                spread_to(x, z - 1);
+                            uint64_t final_mask = -static_cast<int64_t>((res_f & res_e) != 0);
+                            
+                            // Push bit AND set the countdown (7) for the neighbor if spreading
+                            _push_to_buffer(n_idx, (bit_mask & final_mask) | (7ULL << 56));
+                        }
+                    };
+
+                    spread_to(x + 1, z);
+                    spread_to(x - 1, z);
+                    spread_to(x, z + 1);
+                    spread_to(x, z - 1);
+                }
             }
             iterator &= ~bit_mask;
         }
@@ -221,7 +268,6 @@ void SimulationManager::_apply_propagation() {
             grid[index].effect_stack |= pushed_bits;
             _mark_tile_active(index);
         }
-        // Reset buffer and dirty state for this index
         propagation_buffer[index] = 0;
         is_dirty_map[index] = false;
     }
@@ -235,7 +281,7 @@ void SimulationManager::set_flammable(int biome_id, bool flammable) {
 }
 
 void SimulationManager::set_propagation_rule(int bit_index, bool check_flammable, bool check_elevation) {
-    if (bit_index >= 0 && bit_index < 64) {
+    if (bit_index >= 0 && bit_index < 56) {
         propagation_rules[bit_index].active = true;
         propagation_rules[bit_index].check_flammability = check_flammable;
         propagation_rules[bit_index].check_elevation = check_elevation;
@@ -243,13 +289,21 @@ void SimulationManager::set_propagation_rule(int bit_index, bool check_flammable
     }
 }
 
+void SimulationManager::set_propagation_interval(int bit_index, int interval) {
+    if (bit_index >= 0 && bit_index < 56) {
+        propagation_rules[bit_index].spread_interval = interval > 0 ? interval : 1;
+    }
+}
+
 void SimulationManager::generate_new_world(int seed) {
     grid.assign(map_width * map_height, Tile{0, 0, 0, 0, 0, 0, {0, 0, 0}});
+    for (auto &tile : grid) tile.set_countdown(7);
     active_tiles.clear();
     is_active_map.assign(map_width * map_height, false);
     dirty_propagation_indices.clear();
     is_dirty_map.assign(map_width * map_height, false);
     std::fill(propagation_buffer.begin(), propagation_buffer.end(), 0);
+    step_count = 0;
 }
 
 void SimulationManager::set_tile_composition(int x, int z, uint8_t composition) {
@@ -269,6 +323,9 @@ void SimulationManager::set_tile_effect(int x, int z, uint64_t effect_bit) {
     if (x >= 0 && x < map_width && z >= 0 && z < map_height) {
         int index = z * map_width + x;
         grid[index].effect_stack |= effect_bit;
+        if (effect_bit & 0x00FFFFFFFFFFFFFFULL) {
+            grid[index].set_countdown(7);
+        }
         _mark_tile_active(index);
     }
 }

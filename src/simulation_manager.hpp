@@ -22,6 +22,7 @@ private:
     std::vector<bool> is_dirty_map; // Prevent duplicates in dirty list
     int map_width = 32;
     int map_height = 32;
+    uint32_t step_count = 0;
 
     void _mark_tile_active(int index);
     void _push_to_buffer(int index, uint64_t mask);
@@ -37,6 +38,7 @@ private:
         bool active = false;
         bool check_flammability = false;
         bool check_elevation = false;
+        int spread_interval = 1; // 1 = every step, 4 = every 4 steps
         uint64_t bit = 0;
     };
     PropagationRule propagation_rules[64];
@@ -71,6 +73,7 @@ public:
     void add_biome_transition(uint8_t biome_id, int effect_bit, uint8_t result_biome_id);
     void set_flammable(int biome_id, bool flammable);
     void set_propagation_rule(int bit_index, bool check_flammable, bool check_elevation);
+    void set_propagation_interval(int bit_index, int interval);
     
     int get_map_width() const { return map_width; }
     int get_map_height() const { return map_height; }

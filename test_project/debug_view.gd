@@ -73,6 +73,12 @@ func _load_definitions():
 				effect_names[bit] = e.name
 				effect_dropdown.add_item(e.name, bit)
 				
+				# Apply spread interval if defined
+				if e.has("interval"):
+					var idx = _get_bit_index(bit)
+					sim.set_propagation_interval(idx, int(e.interval))
+					print("  Effect [%s] interval set to %d" % [e.name, int(e.interval)])
+				
 			var fire_bit = _get_effect_bit("Fire")
 			if fire_bit != 0:
 				var idx = _get_bit_index(fire_bit)
@@ -281,43 +287,43 @@ func _on_load_map_pressed():
 	sim.run_scent_update(player_pos.x, player_pos.y)
 	queue_redraw()
 
-func _on_save_pressed():
-	var data = {
-		"width": sim.map_width,
-		"height": sim.map_height,
-		"player": {"x": player_pos.x, "y": player_pos.y},
-		"tiles": []
-	}
-	for z in range(sim.map_height):
-		for x in range(sim.map_width):
-			var tile = {
-				"x": x, "z": z,
-				"comp": sim.get_tile_composition(x, z),
-				"imp": sim.is_impassable(x, z),
-				"eff": sim.get_tile_effects(x, z)
-			}
-			if tile.comp != 0 or tile.imp or tile.eff != 0:
-				data.tiles.append(tile)
-	
-	var file = FileAccess.open("user://grid_save.json", FileAccess.WRITE)
-	file.store_string(JSON.stringify(data))
-	print("Saved to user://grid_save.json")
+# func _on_save_pressed():
+# 	var data = {
+# 		"width": sim.map_width,
+# 		"height": sim.map_height,
+# 		"player": {"x": player_pos.x, "y": player_pos.y},
+# 		"tiles": []
+# 	}
+# 	for z in range(sim.map_height):
+# 		for x in range(sim.map_width):
+# 			var tile = {
+# 				"x": x, "z": z,
+# 				"comp": sim.get_tile_composition(x, z),
+# 				"imp": sim.is_impassable(x, z),
+# 				"eff": sim.get_tile_effects(x, z)
+# 			}
+# 			if tile.comp != 0 or tile.imp or tile.eff != 0:
+# 				data.tiles.append(tile)
+# 	
+# 	var file = FileAccess.open("user://grid_save.json", FileAccess.WRITE)
+# 	file.store_string(JSON.stringify(data))
+# 	print("Saved to user://grid_save.json")
 
-func _on_load_pressed():
-	if not FileAccess.file_exists("user://grid_save.json"): return
-	var file = FileAccess.open("user://grid_save.json", FileAccess.READ)
-	var data = JSON.parse_string(file.get_as_text())
-	
-	sim.generate_new_world(0) # Clear
-	player_pos = Vector2i(data.player.x, data.player.y)
-	
-	for t in data.tiles:
-		sim.set_tile_composition(t.x, t.z, t.comp)
-		sim.set_impassable(t.x, t.z, t.imp)
-		sim.set_tile_effect(t.x, t.z, int(t.eff))
-	
-	sim.run_scent_update(player_pos.x, player_pos.y)
-	queue_redraw()
+# func _on_load_pressed():
+# 	if not FileAccess.file_exists("user://grid_save.json"): return
+# 	var file = FileAccess.open("user://grid_save.json", FileAccess.READ)
+# 	var data = JSON.parse_string(file.get_as_text())
+# 	
+# 	sim.generate_new_world(0) # Clear
+# 	player_pos = Vector2i(data.player.x, data.player.y)
+# 	
+# 	for t in data.tiles:
+# 		sim.set_tile_composition(t.x, t.z, t.comp)
+# 		sim.set_impassable(t.x, t.z, t.imp)
+# 		sim.set_tile_effect(t.x, t.z, int(t.eff))
+# 	
+# 	sim.run_scent_update(player_pos.x, player_pos.y)
+# 	queue_redraw()
 
 func _on_toggle_scent_toggled(button_pressed):
 	show_scent = button_pressed
@@ -370,7 +376,6 @@ func _draw():
 					if effects & (1 << i):
 						count += 1
 				
-				var i_found = 0
 				for i in range(16):
 					if effects & (1 << i):
 						var ball_pos = center
@@ -381,7 +386,6 @@ func _draw():
 						
 						var ball_color = _get_mana_color(1 << i)
 						draw_circle(ball_pos, 3, ball_color)
-						i_found += 1
 				
 			# Draw Scent
 			if show_scent:

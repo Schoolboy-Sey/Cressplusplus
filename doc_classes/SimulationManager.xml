@@ -86,6 +86,37 @@
 				Returns true if the tile is flagged as impassable for scent propagation and unit movement.
 			</description>
 		</method>
+		<method name="get_scent_map_string" qualifiers="const">
+			<return type="String" />
+			<description>
+				Returns an ASCII representation of the current scent grid for debugging purposes.
+			</description>
+		</method>
+		<method name="set_flammable">
+			<return type="void" />
+			<param index="0" name="biome_id" type="int" />
+			<param index="1" name="flammable" type="bool" />
+			<description>
+				Configures whether a specific biome ID is considered flammable for the propagation engine.
+			</description>
+		</method>
+		<method name="set_propagation_interval">
+			<return type="void" />
+			<param index="0" name="bit_index" type="int" />
+			<param index="1" name="interval" type="int" />
+			<description>
+				Sets the simulation step interval for a specific effect bit. For example, an interval of 4 means the effect only spreads to neighbors every 4 steps.
+			</description>
+		</method>
+		<method name="set_propagation_rule">
+			<return type="void" />
+			<param index="0" name="bit_index" type="int" />
+			<param index="1" name="check_flammable" type="bool" />
+			<param index="2" name="check_elevation" type="bool" />
+			<description>
+				Configures the propagation behavior for a specific effect bit, enabling flammability and elevation checks.
+			</description>
+		</method>
 		<method name="run_scent_update">
 			<return type="void" />
 			<param index="0" name="player_x" type="int" />

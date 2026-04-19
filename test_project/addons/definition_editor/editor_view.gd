@@ -22,14 +22,28 @@ func _setup_checkboxes():
 			container.add_child(cb)
 			
 	for child in %EffectInputs.get_children(): child.queue_free()
+	
+	# Header for Effects
+	%EffectInputs.add_child(Label.new()) # Empty
+	var lbl_name = Label.new(); lbl_name.text = "Effect Name"; %EffectInputs.add_child(lbl_name)
+	var lbl_int = Label.new(); lbl_int.text = "Spread Interval"; %EffectInputs.add_child(lbl_int)
+
 	for i in range(8):
 		var lbl = Label.new()
 		lbl.text = "Bit %d:" % i
 		%EffectInputs.add_child(lbl)
+		
 		var edit = LineEdit.new()
 		edit.size_flags_horizontal = SIZE_EXPAND_FILL
-		edit.text_changed.connect(_on_effect_name_changed.bind(i))
+		edit.text_changed.connect(_on_effect_data_changed.bind(i))
 		%EffectInputs.add_child(edit)
+		
+		var sb = SpinBox.new()
+		sb.min_value = 1
+		sb.max_value = 255
+		sb.value = 1
+		sb.value_changed.connect(_on_effect_data_changed.bind(i))
+		%EffectInputs.add_child(sb)
 
 func _load_json():
 	var file = FileAccess.open("res://definitions.json", FileAccess.READ)
@@ -140,20 +154,35 @@ func _on_update_biome_pressed():
 func _on_byte_changed(value):
 	var byte_idx = int(value)
 	var inputs = %EffectInputs.get_children()
+	# Skip headers
 	for i in range(8):
 		var bit_idx = (byte_idx * 8) + i
 		var bit_val = 1 << bit_idx
-		var edit = inputs[i*2 + 1]
+		
+		var edit = inputs[3 + i*3 + 1]
+		var sb = inputs[3 + i*3 + 2]
+		
 		edit.text = ""
+		sb.set_value_no_signal(1)
+		
 		for e in data.effects:
 			if int(e.bit) == bit_val:
 				edit.text = e.name
+				if e.has("interval"):
+					sb.set_value_no_signal(e.interval)
 				break
 
-func _on_effect_name_changed(new_name, local_bit_idx):
+func _on_effect_data_changed(_val, local_bit_idx):
 	var byte_idx = int(%ByteSelector.value)
 	var bit_idx = (byte_idx * 8) + local_bit_idx
 	var bit_val = 1 << bit_idx
+	
+	var inputs = %EffectInputs.get_children()
+	var edit = inputs[3 + local_bit_idx*3 + 1]
+	var sb = inputs[3 + local_bit_idx*3 + 2]
+	
+	var new_name = edit.text
+	var new_interval = int(sb.value)
 	
 	var found = false
 	for i in range(data.effects.size()):
@@ -162,11 +191,17 @@ func _on_effect_name_changed(new_name, local_bit_idx):
 				data.effects.remove_at(i)
 			else:
 				data.effects[i].name = new_name
+				data.effects[i].interval = new_interval
 			found = true
 			break
 	
 	if not found and new_name != "":
-		data.effects.append({"id": bit_idx, "name": new_name, "bit": bit_val})
+		data.effects.append({
+			"id": float(bit_idx), 
+			"name": new_name, 
+			"bit": float(bit_val),
+			"interval": float(new_interval)
+		})
 	
 	_refresh_dropdowns()
 
@@ -294,10 +329,8 @@ func _on_delete_trans_pressed():
 # --- Global Save ---
 
 func _on_save_all_pressed():
-	# Use absolute path to bypass res:// resolution issues in some environments
 	var abs_path = ProjectSettings.globalize_path("res://definitions.json")
-	print("DefinitionEditor: Target path: ", abs_path)
-
+	
 	# Verification log before saving
 	for b in data.biomes:
 		if b.has("flammable") and b.flammable:
@@ -317,11 +350,8 @@ func _on_save_all_pressed():
 			var content = verify_file.get_as_text()
 			if content.contains("\"flammable\": true"):
 				print("DefinitionEditor: VERIFIED ON DISK: Raw text contains 'flammable: true'")
-			else:
-				printerr("DefinitionEditor: VERIFICATION FAILED! 'flammable: true' missing from raw text.")
 			verify_file.close()
 			
-		# Force Godot to notice the change
 		EditorInterface.get_resource_filesystem().scan()
 	else:
 		printerr("DefinitionEditor: FAILED to open definitions.json for writing!")
