@@ -93,7 +93,7 @@ unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "Map Name"
 
-[node name="SaveMapBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+[node name="SaveMapBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxC'kljontainer"]
 layout_mode = 2
 text = "Save Map As..."
 

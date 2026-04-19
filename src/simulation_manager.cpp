@@ -7,16 +7,17 @@
 
 using namespace godot;
 
+static inline int ctz64(uint64_t mask) {
 #ifdef _MSC_VER
-#include <intrin.h>
-static inline int __builtin_ctzll(unsigned __int64 mask) {
     unsigned long where;
     if (_BitScanForward64(&where, mask)) {
         return (int)where;
     }
     return 64;
-}
+#else
+    return mask == 0 ? 64 : __builtin_ctzll(mask);
 #endif
+}
 
 void SimulationManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("run_step"), &SimulationManager::run_step);
@@ -53,9 +54,11 @@ void SimulationManager::_bind_methods() {
 SimulationManager::SimulationManager() {
     int size = map_width * map_height;
     grid.resize(size);
-    propagation_buffer.resize(size);
+    propagation_buffer.assign(size, 0);
     is_active_map.assign(size, false);
+    is_dirty_map.assign(size, false);
     active_tiles.reserve(size / 10);
+    dirty_propagation_indices.reserve(size / 10);
     clear_interaction_tables();
 }
 
@@ -70,22 +73,39 @@ void SimulationManager::_mark_tile_active(int index) {
     }
 }
 
+void SimulationManager::_push_to_buffer(int index, uint64_t mask) {
+    if (index >= 0 && index < (int)propagation_buffer.size()) {
+        propagation_buffer[index] |= mask;
+        if (!is_dirty_map[index]) {
+            is_dirty_map[index] = true;
+            dirty_propagation_indices.push_back(index);
+        }
+    }
+}
+
 void SimulationManager::run_step() {
+    // Collect tiles that are active THIS turn
     std::vector<int> current_active = active_tiles;
     active_tiles.clear();
     std::fill(is_active_map.begin(), is_active_map.end(), false);
 
+    // 1. Resolve internal Chemistry/Annihilation
     for (int index : current_active) {
         _resolve_internal_alu(grid[index]);
     }
 
+    // 2. Process Propagation (writes to buffer)
     _process_propagation_sparse(current_active);
 
+    // 3. Resolve Biome Transitions and Wipe Stack
     for (int index : current_active) {
         _resolve_transitions(grid[index]);
     }
 
+    // 4. Inject bits from biomes
     _inject_biome_effects();
+
+    // 5. Apply Buffer to next turn's active list
     _apply_propagation();
 }
 
@@ -94,7 +114,7 @@ void SimulationManager::_resolve_internal_alu(Tile &tile) {
     uint64_t iterator_mask = tile.effect_stack;
 
     while (iterator_mask != 0) {
-        int bit = __builtin_ctzll(iterator_mask);
+        int bit = ctz64(iterator_mask);
         uint64_t bit_mask = 1ULL << bit;
 
         if (remaining_stack & bit_mask) {
@@ -110,13 +130,13 @@ void SimulationManager::_resolve_internal_alu(Tile &tile) {
 
     iterator_mask = remaining_stack;
     while (iterator_mask != 0) {
-        int bit_a = __builtin_ctzll(iterator_mask);
+        int bit_a = ctz64(iterator_mask);
         uint64_t mask_a = 1ULL << bit_a;
 
         if (remaining_stack & mask_a) {
             uint64_t inner_mask = remaining_stack & ~mask_a;
             while (inner_mask != 0) {
-                int bit_b = __builtin_ctzll(inner_mask);
+                int bit_b = ctz64(inner_mask);
                 uint64_t mask_b = 1ULL << bit_b;
 
                 uint64_t result = chemistry_pairs[bit_a][bit_b];
@@ -138,18 +158,18 @@ void SimulationManager::_resolve_internal_alu(Tile &tile) {
 void SimulationManager::_resolve_transitions(Tile &tile) {
     uint64_t iterator_mask = tile.effect_stack;
     while (iterator_mask != 0) {
-        int bit = __builtin_ctzll(iterator_mask);
+        int bit = ctz64(iterator_mask);
         tile.composition = biome_transitions[tile.composition][bit];
         iterator_mask &= ~(1ULL << bit);
     }
     tile.effect_stack = 0;
 }
 
-void SimulationManager::_inject_biome_effects() {}
+void SimulationManager::_inject_biome_effects() {
+    // Future expansion: INJECTION_LUT
+}
 
 void SimulationManager::_process_propagation_sparse(const std::vector<int>& active_indices) {
-    memset(propagation_buffer.data(), 0, propagation_buffer.size() * sizeof(uint64_t));
-
     for (int index : active_indices) {
         uint64_t stack = grid[index].effect_stack;
         if (stack == 0) continue;
@@ -160,7 +180,7 @@ void SimulationManager::_process_propagation_sparse(const std::vector<int>& acti
         uint64_t iterator = stack;
 
         while (iterator != 0) {
-            int bit_idx = __builtin_ctzll(iterator);
+            int bit_idx = ctz64(iterator);
             uint64_t bit_mask = 1ULL << bit_idx;
             const PropagationRule &rule = propagation_rules[bit_idx];
             
@@ -180,7 +200,7 @@ void SimulationManager::_process_propagation_sparse(const std::vector<int>& acti
                         uint8_t res_e = (is_e & e_req_mask) | ~e_req_mask;
 
                         uint64_t final_mask = -static_cast<int64_t>((res_f & res_e) != 0);
-                        propagation_buffer[n_idx] |= (bit_mask & final_mask);
+                        _push_to_buffer(n_idx, bit_mask & final_mask);
                     }
                 };
 
@@ -195,13 +215,17 @@ void SimulationManager::_process_propagation_sparse(const std::vector<int>& acti
 }
 
 void SimulationManager::_apply_propagation() {
-    for (size_t i = 0; i < grid.size(); ++i) {
-        uint64_t pushed_bits = propagation_buffer[i];
+    for (int index : dirty_propagation_indices) {
+        uint64_t pushed_bits = propagation_buffer[index];
         if (pushed_bits != 0) {
-            grid[i].effect_stack |= pushed_bits;
-            _mark_tile_active((int)i);
+            grid[index].effect_stack |= pushed_bits;
+            _mark_tile_active(index);
         }
+        // Reset buffer and dirty state for this index
+        propagation_buffer[index] = 0;
+        is_dirty_map[index] = false;
     }
+    dirty_propagation_indices.clear();
 }
 
 void SimulationManager::set_flammable(int biome_id, bool flammable) {
@@ -223,6 +247,9 @@ void SimulationManager::generate_new_world(int seed) {
     grid.assign(map_width * map_height, Tile{0, 0, 0, 0, 0, 0, {0, 0, 0}});
     active_tiles.clear();
     is_active_map.assign(map_width * map_height, false);
+    dirty_propagation_indices.clear();
+    is_dirty_map.assign(map_width * map_height, false);
+    std::fill(propagation_buffer.begin(), propagation_buffer.end(), 0);
 }
 
 void SimulationManager::set_tile_composition(int x, int z, uint8_t composition) {

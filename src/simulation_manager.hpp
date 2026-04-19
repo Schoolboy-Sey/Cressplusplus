@@ -18,10 +18,13 @@ private:
     std::vector<uint64_t> propagation_buffer;
     std::vector<int> active_tiles; // Indices of tiles with effects
     std::vector<bool> is_active_map; // Bitmask for fast index existence check
+    std::vector<int> dirty_propagation_indices; // Track what to clear/apply
+    std::vector<bool> is_dirty_map; // Prevent duplicates in dirty list
     int map_width = 32;
     int map_height = 32;
 
     void _mark_tile_active(int index);
+    void _push_to_buffer(int index, uint64_t mask);
 
     // LUTs for Branchless ALU and Physics
     uint64_t annihilation_matrix[64];
