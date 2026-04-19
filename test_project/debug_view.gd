@@ -262,6 +262,7 @@ func _on_load_map_pressed():
 		return
 		
 	var map_name = %MapDropdown.get_item_text(idx)
+	%MapNameInput.text = map_name.replace(".json", "") # Set text for easy saving
 	var file = FileAccess.open("user://maps/" + map_name, FileAccess.READ)
 	if not file:
 		print("Error: Could not open map " + map_name)
