@@ -62,6 +62,15 @@ All notable changes to the Cress project will be documented in this file.
     - **Heat Thresholds**: Implemented smolder countdowns (7 steps) using Byte 12 timer bits. Effects must "build up" on a tile before jumping to neighbors.
     - **Spread Intervals**: Added `set_propagation_interval` to configure effect-specific speed (e.g., Fire spreads every 4 steps, Water spreads every 1).
     - **Fuel-Aware Persistence**: Effects now strictly extinguish if their host biome transforms into a non-flammable state (e.g., Forest -> Dirt consumes the fire fuel).
+- **Pooled ECS & Deterministic Combat**:
+    - **Structure of Arrays (SoA)**: Entities are managed in high-speed parallel arrays with a fixed-memory budget of 4,096 units.
+    - **The Clash**: Implemented deterministic combat resolution using `Weight + Velocity`.
+    - **Movement Sub-Steps**: High-velocity units now correctly take multiple sequential steps per turn.
+    - **Automated Scent**: The Smellnet AI tracking system now automatically source-links to the first Player unit (Team 0).
+- **Tooling: "Play Mode" & State Snapshots**:
+    - **Snapshot Engine**: Added C++ binary backup/restore for the entire world state.
+    - **Undo/Revert**: Players can enter Play Mode to test scenarios and instantly revert the map to its design state upon exiting.
+    - **Intent HUD**: Added Cyan (Player) and Red (Enemy) movement arrows to telegraph planned paths during the turn phase.
 
 ### Fixed
 - Resolved `static_assert` failure where `Tile` struct was exceeding 16 bytes due to default compiler padding.

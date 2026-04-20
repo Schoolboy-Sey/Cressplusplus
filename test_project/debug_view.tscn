@@ -70,6 +70,39 @@ text = "Run Step"
 layout_mode = 2
 text = "Run Turn (10 Steps)"
 
+[node name="HSeparator3" type="HSeparator" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+
+[node name="UnitLabel" type="Label" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Unit Management"
+
+[node name="UnitSpawnDropdown" type="OptionButton" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBoxTeam" type="HBoxContainer" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+
+[node name="AllyRadio" type="CheckBox" parent="CanvasLayer/Control/Panel/VBoxContainer/HBoxTeam"]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "Ally"
+
+[node name="EnemyRadio" type="CheckBox" parent="CanvasLayer/Control/Panel/VBoxContainer/HBoxTeam"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Enemy"
+
+[node name="SpawnUnitBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Spawn Selected Unit"
+
+[node name="DespawnUnitBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+text = "Despawn Unit"
+
 [node name="HSeparator2" type="HSeparator" parent="CanvasLayer/Control/Panel/VBoxContainer"]
 layout_mode = 2
 
@@ -97,6 +130,38 @@ text = "Load Selected Map"
 [node name="ReloadDefBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
 layout_mode = 2
 text = "Reload Definitions"
+
+[node name="HSeparator4" type="HSeparator" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+layout_mode = 2
+
+[node name="PlayModeBtn" type="Button" parent="CanvasLayer/Control/Panel/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0.8, 1, 1)
+text = "Enter Play Mode"
+
+[node name="PlayHUD" type="VBoxContainer" parent="CanvasLayer/Control"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -200.0
+offset_bottom = 150.0
+grow_horizontal = 0
+
+[node name="ExecuteTurnBtn" type="Button" parent="CanvasLayer/Control/PlayHUD"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.8, 0, 1)
+text = "EXECUTE TURN"
+
+[node name="ExitPlayBtn" type="Button" parent="CanvasLayer/Control/PlayHUD"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.4, 0.4, 1)
+text = "Exit Play Mode (Reset)"
 
 [node name="Toggles" type="VBoxContainer" parent="CanvasLayer/Control"]
 layout_mode = 1
@@ -139,9 +204,14 @@ RMB: Set Player Pos"
 [connection signal="toggled" from="CanvasLayer/Control/Panel/VBoxContainer/ImpassableCheck" to="." method="_on_impassable_check_toggled"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/RunStepBtn" to="." method="_on_run_step_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/RunTurnBtn" to="." method="_on_run_turn_pressed"]
+[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/SpawnUnitBtn" to="." method="_on_spawn_unit_pressed"]
+[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/DespawnUnitBtn" to="." method="_on_despawn_unit_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/SaveMapBtn" to="." method="_on_save_map_as_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/LoadMapBtn" to="." method="_on_load_map_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/ReloadDefBtn" to="." method="_on_load_definitions_pressed"]
+[connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/PlayModeBtn" to="." method="_on_play_mode_pressed"]
+[connection signal="pressed" from="CanvasLayer/Control/PlayHUD/ExecuteTurnBtn" to="." method="_on_execute_turn_pressed"]
+[connection signal="pressed" from="CanvasLayer/Control/PlayHUD/ExitPlayBtn" to="." method="_on_exit_play_pressed"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/ScentToggle" to="." method="_on_toggle_scent_toggled"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/BiomeToggle" to="." method="_on_toggle_biome_toggled"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/ImpassableToggle" to="." method="_on_toggle_impassable_toggled"]

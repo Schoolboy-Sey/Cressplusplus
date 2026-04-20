@@ -30,6 +30,10 @@ struct Tile {
     static const uint8_t FLAG_HAZARD = 0x10;
     static const uint8_t FLAG_IMPASSABLE = 0x20;
 
+    // Constants for Byte 12 (effect_stack top byte)
+    static const uint64_t FLAG_HAS_ENTITY = 1ULL << 59; // Byte 12, Bit 3
+    static const uint64_t FLAG_HAS_ITEM = 1ULL << 60;   // Byte 12, Bit 4
+
     void set_scent(uint8_t scent) {
         pathing_scent = (pathing_scent & ~SCENT_MASK) | (scent & SCENT_MASK);
     }

@@ -13,3 +13,6 @@
 - **Current Architecture**: Handles 10k-50k tiles easily.
 - **Sparse Architecture**: Targeting 1M tiles at 60 FPS by skipping static "empty" biomes.
 - **GPU Offloading**: Using Compute Shaders for the ALU if the interaction rules become complex enough that the CPU cannot keep up with 1M+ tiles.
+
+this is my gem code  resume                                   
+   d41ea80b-266f-4a3f-a080-4ca72df598d5 

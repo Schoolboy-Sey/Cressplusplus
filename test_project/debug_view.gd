@@ -1,5 +1,8 @@
 extends Node2D
 
+enum MODE { EDIT, PLAY }
+var current_mode = MODE.EDIT
+
 var sim: SimulationManager
 var tile_size: int = 20
 var show_scent: bool = true
@@ -7,14 +10,16 @@ var show_biome: bool = true
 var show_impassable: bool = true
 
 var selected_tile: Vector2i = Vector2i(-1, -1)
-var player_pos: Vector2i = Vector2i(5, 5)
+var selected_unit_id: int = -1
 var is_painting: bool = false
+var spawn_team: int = 0 # 0=Ally, 1=Enemy
 
 var definitions = {}
 var effect_names = {}
 var biome_names = {}
 
 @onready var ui_panel = $CanvasLayer/Control/Panel
+@onready var play_hud = %PlayHUD
 @onready var comp_input = $CanvasLayer/Control/Panel/VBoxContainer/CompInput
 @onready var biome_name_label = $CanvasLayer/Control/Panel/VBoxContainer/BiomeName
 @onready var bit_container = $CanvasLayer/Control/Panel/VBoxContainer/BitContainer
@@ -27,437 +32,291 @@ func _ready():
 	_load_definitions()
 	_setup_bit_checkboxes()
 	sim.generate_new_world(42)
-	# starting with the smell not displayed. 
-	# sim.run_scent_update(player_pos.x, player_pos.y)
 	_refresh_map_list()
+	_update_mode_ui()
+	queue_redraw()
+
+func _update_mode_ui():
+	if current_mode == MODE.EDIT:
+		ui_panel.show(); play_hud.hide()
+	else:
+		ui_panel.hide(); play_hud.show()
+
+func _on_play_mode_pressed():
+	sim.save_state_snapshot()
+	sim.auto_update_scent()
+	sim.process_ai_intents()
+	current_mode = MODE.PLAY
+	_update_mode_ui()
+	queue_redraw()
+
+func _on_exit_play_pressed():
+	sim.load_state_snapshot()
+	current_mode = MODE.EDIT
+	selected_unit_id = -1
+	_update_mode_ui()
+	queue_redraw()
+
+func _on_execute_turn_pressed():
+	for i in range(10): sim.run_step()
+	sim.auto_update_scent()
+	sim.process_ai_intents()
 	queue_redraw()
 
 func _setup_bit_checkboxes():
 	var names = ["W (1)", "F (2)", "E (4)", "Pl (8)", "Pu (16)", "R (32)", "Mi (64)", "Ma (128)"]
 	for i in range(8):
-		var cb = CheckBox.new()
-		cb.text = names[i]
+		var cb = CheckBox.new(); cb.text = names[i]
 		cb.toggled.connect(_on_bit_toggled.bind(1 << i))
 		bit_container.add_child(cb)
 
 func _on_bit_toggled(toggled: bool, bit: int):
 	if selected_tile.x != -1:
-		var current = sim.get_tile_composition(selected_tile.x, selected_tile.y)
-		if toggled:
-			current |= bit
-		else:
-			current &= ~bit
-		sim.set_tile_composition(selected_tile.x, selected_tile.y, current)
-		comp_input.text = str(current)
-		queue_redraw()
+		var cur = sim.get_tile_composition(selected_tile.x, selected_tile.y)
+		if toggled: cur |= bit
+		else: cur &= ~bit
+		sim.set_tile_composition(selected_tile.x, selected_tile.y, cur)
+		comp_input.text = str(cur); queue_redraw()
 
 func _load_definitions():
 	var file = FileAccess.open("res://definitions.json", FileAccess.READ)
 	if file:
 		var json = JSON.parse_string(file.get_as_text())
 		if json:
-			definitions = json
-			sim.clear_interaction_tables()
-			print("DebugView: Loading %d biomes, %d effects..." % [definitions.biomes.size(), definitions.effects.size()])
-			
-			# Map Biomes
+			definitions = json; sim.clear_interaction_tables()
 			for b in definitions.biomes:
 				biome_names[int(b.id)] = b.name
-				if b.has("flammable") and b.flammable:
-					sim.set_flammable(int(b.id), true)
-					print("  Biome %d [%s] marked Flammable" % [int(b.id), b.name])
-				
-			# Map Effects
+				if b.has("flammable") and b.flammable: sim.set_flammable(int(b.id), true)
+				if b.has("weight"): sim.set_biome_weight(int(b.id), int(b.weight))
 			for e in definitions.effects:
-				var bit = int(e.bit)
-				effect_names[bit] = e.name
-				effect_dropdown.add_item(e.name, bit)
-				
-				# Apply spread interval if defined
-				if e.has("interval"):
-					var idx = _get_bit_index(bit)
-					sim.set_propagation_interval(idx, int(e.interval))
-					print("  Effect [%s] interval set to %d" % [e.name, int(e.interval)])
-				
-			var fire_bit = _get_effect_bit("Fire")
-			if fire_bit != 0:
-				var idx = _get_bit_index(fire_bit)
-				sim.set_propagation_rule(idx, true, false)
-				print("  Fire Rule: Bit %d is active" % idx)
-				
-			# Map Interactions
-			for i in definitions.interactions:
-				if i.type == "annihilation":
-					var bit_a = _get_effect_bit(i.a)
-					var bit_b = _get_effect_bit(i.b)
-					if bit_a != 0 and bit_b != 0:
-						sim.add_annihilation(_get_bit_index(bit_a), _get_bit_index(bit_b))
-				elif i.type == "chemistry":
-					var bit_a = _get_effect_bit(i.a)
-					var bit_b = _get_effect_bit(i.b)
-					var res_bit = _get_effect_bit(i.result)
-					if bit_a != 0 and bit_b != 0 and res_bit != 0:
-						sim.add_chemistry(_get_bit_index(bit_a), _get_bit_index(bit_b), res_bit)
+				var bit = int(e.bit); effect_names[bit] = e.name; effect_dropdown.add_item(e.name, bit)
+				var b_idx = _get_bit_index(bit)
+				sim.set_propagation_rule(b_idx, true, false) # Default: check flammable, ignore elevation for now
+				if e.has("interval"): sim.set_propagation_interval(b_idx, int(e.interval))
+				if e.has("weight"): sim.set_effect_weight(b_idx, int(e.weight))
 			
-			# Map Transitions
-			var trans_count = 0
+			%UnitSpawnDropdown.clear()
+			if definitions.has("units"):
+				for u in definitions.units: %UnitSpawnDropdown.add_item(u.name)
+				
+			for i in definitions.interactions:
+				var bit_a = _get_effect_bit(i.a); var bit_b = _get_effect_bit(i.b)
+				if i.type == "annihilation":
+					if bit_a != 0 and bit_b != 0: sim.add_annihilation(_get_bit_index(bit_a), _get_bit_index(bit_b))
+				elif i.type == "chemistry":
+					var res_bit = _get_effect_bit(i.result)
+					if bit_a != 0 and bit_b != 0 and res_bit != 0: sim.add_chemistry(_get_bit_index(bit_a), _get_bit_index(bit_b), res_bit)
 			for t in definitions.transitions:
-				var b_id = _get_biome_id(t.biome)
-				var e_bit = _get_effect_bit(t.effect)
-				var res_b = _get_biome_id(t.result)
-				# Important: only add if we found the IDs
-				if e_bit != 0:
-					sim.add_biome_transition(b_id, _get_bit_index(e_bit), res_b)
-					trans_count += 1
-			print("DebugView: Loaded %d valid transitions." % trans_count)
+				var b_id = _get_biome_id(t.biome); var e_bit = _get_effect_bit(t.effect); var res_b = _get_biome_id(t.result)
+				if e_bit != 0: sim.add_biome_transition(b_id, _get_bit_index(e_bit), res_b)
 
-func _get_effect_bit(effect_name: String) -> int:
-	for e in definitions.effects:
-		if e.name.strip_edges().to_lower() == effect_name.strip_edges().to_lower():
-			return int(e.bit)
+func _on_team_radio_toggled(pressed: bool, team: int):
+	if pressed:
+		spawn_team = team
+		if team == 0: %EnemyRadio.set_pressed_no_signal(false)
+		else: %AllyRadio.set_pressed_no_signal(false)
+
+func _on_spawn_unit_pressed():
+	if selected_tile.x == -1: return
+	var idx = %UnitSpawnDropdown.selected
+	if idx == -1: return
+	var u_def = definitions.units[idx]
+	var team = 0 if %AllyRadio.button_pressed else 1
+	var flags = 0
+	if u_def.get("push", false): flags |= 1 << 1 # FLAG_PUSH
+	sim.spawn_unit_full(selected_tile.x, selected_tile.y, team, u_def.weight, u_def.velocity, flags)
+	queue_redraw()
+
+func _get_effect_bit(n: String) -> int:
+	for e in definitions.effects: if e.name.strip_edges().to_lower() == n.strip_edges().to_lower(): return int(e.bit)
 	return 0
 
 func _get_bit_index(bit: int) -> int:
-	for i in range(64):
-		if bit == (1 << i): return i
+	for i in range(64): if bit == (1 << i): return i
 	return 0
 
-func _get_biome_id(biome_name: String) -> int:
-	for b in definitions.biomes:
-		if b.name.strip_edges().to_lower() == biome_name.strip_edges().to_lower():
-			return int(b.id)
+func _get_biome_id(n: String) -> int:
+	for b in definitions.biomes: if b.name.strip_edges().to_lower() == n.strip_edges().to_lower(): return int(b.id)
 	return 0
 
 func _input(event):
 	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			if event.pressed:
-				var grid_pos = Vector2i(event.position / tile_size)
+		var grid_pos = Vector2i(event.position / tile_size)
+		if current_mode == MODE.EDIT:
+			if event.button_index == MOUSE_BUTTON_LEFT:
+				if event.pressed:
+					if _is_valid_pos(grid_pos): is_painting = true; selected_tile = grid_pos; _update_ui(); queue_redraw()
+					else: is_painting = false
+				else: is_painting = false
+			elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 				if _is_valid_pos(grid_pos):
-					is_painting = true
-					selected_tile = grid_pos
-					_update_ui()
+					if Input.is_key_pressed(KEY_SHIFT): sim.set_tile_effect(grid_pos.x, grid_pos.y, effect_dropdown.get_selected_id())
+					else: selected_tile = grid_pos; _update_ui()
 					queue_redraw()
-				else:
-					is_painting = false
-			else:
-				is_painting = false
-		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			var grid_pos = Vector2i(event.position / tile_size)
-			if _is_valid_pos(grid_pos):
-				if Input.is_key_pressed(KEY_SHIFT):
-					var effect_bit = effect_dropdown.get_selected_id()
-					sim.set_tile_effect(grid_pos.x, grid_pos.y, effect_bit)
-				else:
-					player_pos = grid_pos
-					sim.run_scent_update(player_pos.x, player_pos.y)
-				queue_redraw()
-				
-	elif event is InputEventMouseMotion and is_painting:
+		elif current_mode == MODE.PLAY:
+			if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+				if _is_valid_pos(grid_pos):
+					var uid_at_click = sim.get_unit_at(grid_pos.x, grid_pos.y)
+					# 1. ATTACK logic: If clicking an enemy while having an ally selected
+					if selected_unit_id != -1 and sim.get_unit_team(selected_unit_id) == 0:
+						if uid_at_click != -1 and sim.get_unit_team(uid_at_click) == 1:
+							var u_pos = sim.get_unit_pos(selected_unit_id)
+							if (abs(grid_pos.x - u_pos.x) + abs(grid_pos.y - u_pos.y)) <= sim.get_unit_velocity(selected_unit_id):
+								sim.move_unit_intent(selected_unit_id, grid_pos.x, grid_pos.y)
+								sim.auto_update_scent(); sim.process_ai_intents(); queue_redraw(); return
+
+					# 2. SELECT logic
+					if uid_at_click != -1:
+						selected_unit_id = uid_at_click; selected_tile = grid_pos; queue_redraw()
+					# 3. MOVE logic
+					elif selected_unit_id != -1 and sim.get_unit_team(selected_unit_id) == 0:
+						var u_pos = sim.get_unit_pos(selected_unit_id)
+						if (abs(grid_pos.x - u_pos.x) + abs(grid_pos.y - u_pos.y)) <= sim.get_unit_velocity(selected_unit_id):
+							sim.move_unit_intent(selected_unit_id, grid_pos.x, grid_pos.y)
+							selected_tile = grid_pos; sim.auto_update_scent(); sim.process_ai_intents(); queue_redraw()
+					else:
+						selected_tile = grid_pos; selected_unit_id = -1; queue_redraw()
+
+	elif event is InputEventMouseMotion and is_painting and current_mode == MODE.EDIT:
 		var grid_pos = Vector2i(event.position / tile_size)
 		if _is_valid_pos(grid_pos) and grid_pos != selected_tile:
-			# PAINT logic
-			if Input.is_key_pressed(KEY_CTRL): # Paint Impassable
-				sim.set_impassable(grid_pos.x, grid_pos.y, impassable_check.button_pressed)
-			elif Input.is_key_pressed(KEY_SHIFT): # Paint Effect
-				var effect_bit = effect_dropdown.get_selected_id()
-				sim.set_tile_effect(grid_pos.x, grid_pos.y, effect_bit)
-			else: # Paint Composition
-				var current_comp = int(comp_input.text)
-				sim.set_tile_composition(grid_pos.x, grid_pos.y, current_comp)
-			
+			if Input.is_key_pressed(KEY_CTRL): sim.set_impassable(grid_pos.x, grid_pos.y, impassable_check.button_pressed)
+			elif Input.is_key_pressed(KEY_SHIFT): sim.set_tile_effect(grid_pos.x, grid_pos.y, effect_dropdown.get_selected_id())
+			else: sim.set_tile_composition(grid_pos.x, grid_pos.y, int(comp_input.text))
 			queue_redraw()
 
-func _is_valid_pos(pos: Vector2i) -> bool:
-	return pos.x >= 0 and pos.x < sim.map_width and pos.y >= 0 and pos.y < sim.map_height
+func _is_valid_pos(pos: Vector2i) -> bool: return pos.x >= 0 and pos.x < sim.map_width and pos.y >= 0 and pos.y < sim.map_height
 
 func _update_ui():
 	if selected_tile.x != -1:
-		ui_panel.show()
 		var comp = sim.get_tile_composition(selected_tile.x, selected_tile.y)
-		comp_input.text = str(comp)
-		
-		# Update Biome Name
-		if biome_names.has(comp):
-			biome_name_label.text = biome_names[comp]
-		else:
-			biome_name_label.text = "Unknown Biome (%d)" % comp
-			
+		comp_input.text = str(comp); biome_name_label.text = biome_names.get(comp, "Unknown Biome (%d)" % comp)
 		impassable_check.button_pressed = sim.is_impassable(selected_tile.x, selected_tile.y)
-		
 		var cbs = bit_container.get_children()
-		for i in range(8):
-			if i < cbs.size():
-				cbs[i].set_pressed_no_signal((comp & (1 << i)) != 0)
-	else:
-		ui_panel.hide()
+		for i in range(8): if i < cbs.size(): cbs[i].set_pressed_no_signal((comp & (1 << i)) != 0)
 
-func _on_run_step_pressed():
-	sim.run_step()
-	sim.run_scent_update(player_pos.x, player_pos.y)
-	queue_redraw()
+func _on_run_step_pressed(): sim.run_step(); sim.auto_update_scent(); queue_redraw()
+func _on_run_turn_pressed(): 
+	for i in range(10): sim.run_step()
+	sim.auto_update_scent(); queue_redraw()
 
-func _on_run_turn_pressed():
-	for i in range(10):
-		sim.run_step()
-	sim.run_scent_update(player_pos.x, player_pos.y)
-	queue_redraw()
+func _on_spawn_player_pressed(): if selected_tile.x != -1: sim.spawn_unit(selected_tile.x, selected_tile.y, 0, 10); queue_redraw()
+func _on_spawn_enemy_pressed(): if selected_tile.x != -1: sim.spawn_unit(selected_tile.x, selected_tile.y, 1, 5); queue_redraw()
+func _on_despawn_unit_pressed():
+	if selected_tile.x != -1:
+		var uid = sim.get_unit_at(selected_tile.x, selected_tile.y)
+		if uid != -1: sim.despawn_unit(uid); queue_redraw()
 
 func _on_comp_input_text_changed(new_text):
-	if selected_tile.x != -1:
-		sim.set_tile_composition(selected_tile.x, selected_tile.y, int(new_text))
-		_update_ui() # Sync checkboxes
-		queue_redraw()
-
+	if selected_tile.x != -1: sim.set_tile_composition(selected_tile.x, selected_tile.y, int(new_text)); _update_ui(); queue_redraw()
 func _on_impassable_check_toggled(button_pressed):
-	if selected_tile.x != -1:
-		sim.set_impassable(selected_tile.x, selected_tile.y, button_pressed)
-		sim.run_scent_update(player_pos.x, player_pos.y)
-		queue_redraw()
+	if selected_tile.x != -1: sim.set_impassable(selected_tile.x, selected_tile.y, button_pressed); sim.auto_update_scent(); queue_redraw()
 
 func _refresh_map_list():
 	%MapDropdown.clear()
 	var dir = DirAccess.open("user://")
-	if not dir.dir_exists("maps"):
-		dir.make_dir("maps")
-	
+	if not dir.dir_exists("maps"): dir.make_dir("maps")
 	dir = DirAccess.open("user://maps")
 	if dir:
-		dir.list_dir_begin()
-		var file_name = dir.get_next()
+		dir.list_dir_begin(); var file_name = dir.get_next()
 		while file_name != "":
-			if not dir.current_is_dir() and file_name.ends_with(".json"):
-				%MapDropdown.add_item(file_name)
+			if not dir.current_is_dir() and file_name.ends_with(".json"): %MapDropdown.add_item(file_name)
 			file_name = dir.get_next()
 
 func _on_save_map_as_pressed():
 	var map_name = %MapNameInput.text
-	if map_name == "":
-		print("Error: No map name provided")
-		return
-	
-	if not map_name.ends_with(".json"):
-		map_name += ".json"
-		
-	var data = {
-		"width": sim.map_width,
-		"height": sim.map_height,
-		"player": {"x": player_pos.x, "y": player_pos.y},
-		"tiles": []
-	}
+	if map_name == "": return
+	if not map_name.ends_with(".json"): map_name += ".json"
+	var data = {"width": sim.map_width, "height": sim.map_height, "player": {"x": 0, "y": 0}, "tiles": []}
 	for z in range(sim.map_height):
 		for x in range(sim.map_width):
-			var tile = {
-				"x": x, "z": z,
-				"comp": sim.get_tile_composition(x, z),
-				"imp": sim.is_impassable(x, z),
-				"eff": sim.get_tile_effects(x, z)
-			}
-			if tile.comp != 0 or tile.imp or tile.eff != 0:
-				data.tiles.append(tile)
-	
-	var file = FileAccess.open("user://maps/" + map_name, FileAccess.WRITE)
-	file.store_string(JSON.stringify(data))
-	print("Saved to user://maps/" + map_name)
-	_refresh_map_list()
+			var tile = {"x": x, "z": z, "comp": sim.get_tile_composition(x, z), "imp": sim.is_impassable(x, z), "eff": sim.get_tile_effects(x, z)}
+			if tile.comp != 0 or tile.imp or tile.eff != 0: data.tiles.append(tile)
+	var file = FileAccess.open("user://maps/" + map_name, FileAccess.WRITE); file.store_string(JSON.stringify(data)); _refresh_map_list()
 
 func _on_load_map_pressed():
 	var idx = %MapDropdown.selected
-	if idx == -1:
-		print("Error: No map selected")
-		return
-		
-	var map_name = %MapDropdown.get_item_text(idx)
-	%MapNameInput.text = map_name.replace(".json", "") # Set text for easy saving
+	if idx == -1: return
+	var map_name = %MapDropdown.get_item_text(idx); %MapNameInput.text = map_name.replace(".json", "")
 	var file = FileAccess.open("user://maps/" + map_name, FileAccess.READ)
-	if not file:
-		print("Error: Could not open map " + map_name)
-		return
-		
-	var data = JSON.parse_string(file.get_as_text())
-	
-	sim.generate_new_world(0) # Clear
-	player_pos = Vector2i(data.player.x, data.player.y)
-	
-	for t in data.tiles:
-		sim.set_tile_composition(t.x, t.z, t.comp)
-		sim.set_impassable(t.x, t.z, t.imp)
-		sim.set_tile_effect(t.x, t.z, int(t.eff))
-	
-	sim.run_scent_update(player_pos.x, player_pos.y)
-	queue_redraw()
+	if not file: return
+	var data = JSON.parse_string(file.get_as_text()); sim.generate_new_world(0)
+	for t in data.tiles: sim.set_tile_composition(t.x, t.z, t.comp); sim.set_impassable(t.x, t.z, t.imp); sim.set_tile_effect(t.x, t.z, int(t.eff))
+	sim.auto_update_scent(); queue_redraw()
 
-# func _on_save_pressed():
-# 	var data = {
-# 		"width": sim.map_width,
-# 		"height": sim.map_height,
-# 		"player": {"x": player_pos.x, "y": player_pos.y},
-# 		"tiles": []
-# 	}
-# 	for z in range(sim.map_height):
-# 		for x in range(sim.map_width):
-# 			var tile = {
-# 				"x": x, "z": z,
-# 				"comp": sim.get_tile_composition(x, z),
-# 				"imp": sim.is_impassable(x, z),
-# 				"eff": sim.get_tile_effects(x, z)
-# 			}
-# 			if tile.comp != 0 or tile.imp or tile.eff != 0:
-# 				data.tiles.append(tile)
-# 	
-# 	var file = FileAccess.open("user://grid_save.json", FileAccess.WRITE)
-# 	file.store_string(JSON.stringify(data))
-# 	print("Saved to user://grid_save.json")
-
-# func _on_load_pressed():
-# 	if not FileAccess.file_exists("user://grid_save.json"): return
-# 	var file = FileAccess.open("user://grid_save.json", FileAccess.READ)
-# 	var data = JSON.parse_string(file.get_as_text())
-# 	
-# 	sim.generate_new_world(0) # Clear
-# 	player_pos = Vector2i(data.player.x, data.player.y)
-# 	
-# 	for t in data.tiles:
-# 		sim.set_tile_composition(t.x, t.z, t.comp)
-# 		sim.set_impassable(t.x, t.z, t.imp)
-# 		sim.set_tile_effect(t.x, t.z, int(t.eff))
-# 	
-# 	sim.run_scent_update(player_pos.x, player_pos.y)
-# 	queue_redraw()
-
-func _on_toggle_scent_toggled(button_pressed):
-	show_scent = button_pressed
-	queue_redraw()
-
-func _on_toggle_biome_toggled(button_pressed):
-	show_biome = button_pressed
-	queue_redraw()
-
-func _on_toggle_impassable_toggled(button_pressed):
-	show_impassable = button_pressed
-	queue_redraw()
-
-func _on_load_definitions_pressed():
-	effect_dropdown.clear()
-	biome_names.clear()
-	_load_definitions()
-	_update_ui()
-	print("Definitions reloaded.")
+func _on_toggle_scent_toggled(button_pressed): show_scent = button_pressed; queue_redraw()
+func _on_toggle_biome_toggled(button_pressed): show_biome = button_pressed; queue_redraw()
+func _on_toggle_impassable_toggled(button_pressed): show_impassable = button_pressed; queue_redraw()
+func _on_load_definitions_pressed(): effect_dropdown.clear(); biome_names.clear(); _load_definitions(); _update_ui()
 
 func _draw():
 	if not sim: return
-	
-	var width = sim.map_width
-	var height = sim.map_height
-	
+	var width = sim.map_width; var height = sim.map_height
 	for z in range(height):
 		for x in range(width):
 			var rect = Rect2(x * tile_size, z * tile_size, tile_size, tile_size)
-			
-			# Draw Biome
-			if show_biome:
-				var comp = sim.get_tile_composition(x, z)
-				var color = _get_biome_color(comp)
-				draw_rect(rect, color)
-			else:
-				draw_rect(rect, Color.DARK_GRAY, false)
-				
-			# Draw Impassable
-			if show_impassable and sim.is_impassable(x, z):
-				draw_rect(rect.grow(-2), Color.BLACK, false, 2.0)
-				
-			# Draw Effects as small balls
+			if show_biome: draw_rect(rect, _get_biome_color(sim.get_tile_composition(x, z)))
+			else: draw_rect(rect, Color.DARK_GRAY, false)
+			if show_impassable and sim.is_impassable(x, z): draw_rect(rect.grow(-2), Color.BLACK, false, 2.0)
 			var effects = sim.get_tile_effects(x, z)
 			if effects != 0:
-				var center = rect.get_center()
-				var angle = 0.0
-				var count = 0
-				for i in range(16): # Check first 16 bits for visualization
-					if effects & (1 << i):
-						count += 1
-				
+				var center = rect.get_center(); var angle = 0.0; var count = 0
+				for i in range(16): if effects & (1 << i): count += 1
 				for i in range(16):
 					if effects & (1 << i):
 						var ball_pos = center
-						if count > 1:
-							var radius = 5.0
-							ball_pos += Vector2(cos(angle), sin(angle)) * radius
-							angle += (2.0 * PI) / count
-						
-						var ball_color = _get_mana_color(1 << i)
-						draw_circle(ball_pos, 3, ball_color)
-				
-			# Draw Scent
+						if count > 1: ball_pos += Vector2(cos(angle), sin(angle)) * 5.0; angle += (2.0 * PI) / count
+						draw_circle(ball_pos, 3, _get_mana_color(1 << i))
 			if show_scent:
 				var scent = sim.get_scent(x, z)
 				if scent > 0:
-					var scent_color = Color(0.8, 0, 0.8, 0.2)
-					draw_rect(rect, scent_color)
+					draw_rect(rect, Color(0.8, 0, 0.8, 0.2))
 					draw_string($CanvasLayer/Control.get_theme_default_font(), rect.position + Vector2(2, 14), str(scent), HORIZONTAL_ALIGNMENT_LEFT, -1, 10)
-
-			# Draw Grid Lines
 			draw_rect(rect, Color(0.2, 0.2, 0.2, 0.5), false)
+	_draw_unit_intents(); _draw_units()
+	if selected_tile.x != -1: draw_rect(Rect2(selected_tile.x * tile_size, selected_tile.y * tile_size, tile_size, tile_size), Color.WHITE, false, 1.0)
 
-	# Draw Player
-	var player_rect = Rect2(player_pos.x * tile_size, player_pos.y * tile_size, tile_size, tile_size)
-	draw_rect(player_rect, Color.YELLOW, false, 2.0)
-	
-	# Draw Selection
-	if selected_tile.x != -1:
-		var sel_rect = Rect2(selected_tile.x * tile_size, selected_tile.y * tile_size, tile_size, tile_size)
-		draw_rect(sel_rect, Color.WHITE, false, 1.0)
+func _draw_units():
+	var units = sim.get_all_units()
+	for uid in units:
+		var pos = units[uid]; var team = sim.get_unit_team(uid)
+		var rect = Rect2(pos.x * tile_size + 4, pos.y * tile_size + 4, tile_size - 8, tile_size - 8)
+		var color = Color.CYAN if team == 0 else Color.ORANGE_RED
+		draw_rect(rect, color); draw_string($CanvasLayer/Control.get_theme_default_font(), rect.position + Vector2(2, 10), str(sim.get_unit_weight(uid)), HORIZONTAL_ALIGNMENT_LEFT, -1, 8)
+
+func _draw_unit_intents():
+	var units = sim.get_all_units()
+	for uid in units:
+		var start = sim.get_unit_pos(uid); var end = sim.get_unit_intent_pos(uid)
+		if start == end: continue
+		var p1 = Vector2(start.x * tile_size + tile_size/2, start.y * tile_size + tile_size/2)
+		var p2 = Vector2(end.x * tile_size + tile_size/2, end.y * tile_size + tile_size/2)
+		var color = Color.CYAN if sim.get_unit_team(uid) == 0 else Color.RED
+		draw_line(p1, p2, color, 2.0)
+		var dir = (p2 - p1).normalized(); draw_line(p2, p2 - dir.rotated(0.5) * 5, color, 2.0); draw_line(p2, p2 - dir.rotated(-0.5) * 5, color, 2.0)
 
 func _get_mana_color(bit: int) -> Color:
 	match bit:
-		1: return Color.BLUE    # W
-		2: return Color.RED     # F
-		4: return Color(0.6, 0.4, 0.2) # E
-		8: return Color.GREEN   # Pl
-		16: return Color.WHITE   # Pu
-		32: return Color(0.2, 0.1, 0.3) # R
-		64: return Color.GOLD    # Mi
-		128: return Color.CYAN   # Ma
+		1: return Color.BLUE
+		2: return Color.RED
+		4: return Color(0.6, 0.4, 0.2)
+		8: return Color.GREEN
+		16: return Color.WHITE
+		32: return Color(0.2, 0.1, 0.3)
+		64: return Color.GOLD
+		128: return Color.CYAN
 	return Color.GRAY
 
 func _get_biome_color(comp: int) -> Color:
-	if comp == 0: return Color(0.3, 0.4, 0.2) # Plains (Grass Green)
-	
-	var color = Color(0, 0, 0)
-	var count = 0
-	
-	# Bit 0: Water (W=1) - Blue
-	if comp & 1:
-		color += Color.BLUE
-		count += 1
-	# Bit 1: Fire (F=2) - Red
-	if comp & 2:
-		color += Color.RED
-		count += 1
-	# Bit 2: Earth (E=4) - Brown
-	if comp & 4:
-		color += Color(0.6, 0.4, 0.2)
-		count += 1
-	# Bit 3: Plant (Pl=8) - Green
-	if comp & 8:
-		color += Color.GREEN
-		count += 1
-	# Bit 4: Purity (Pu=16) - White
-	if comp & 16:
-		color += Color.WHITE
-		count += 1
-	# Bit 5: Ruin (R=32) - Dark Gray/Black
-	if comp & 32:
-		color += Color(0.2, 0.1, 0.3)
-		count += 1
-	# Bit 6: Mind (Mi=64) - Pink/Gold
-	if comp & 64:
-		color += Color.GOLD
-		count += 1
-	# Bit 7: Magic (Ma=128) - Cyan/Teal
-	if comp & 128:
-		color += Color.CYAN
-		count += 1
-		
-	if count > 0:
-		return color / count
+	if comp == 0: return Color(0.3, 0.4, 0.2)
+	var color = Color(0, 0, 0); var count = 0
+	if comp & 1: color += Color.BLUE; count += 1
+	if comp & 2: color += Color.RED; count += 1
+	if comp & 4: color += Color(0.6, 0.4, 0.2); count += 1
+	if comp & 8: color += Color.GREEN; count += 1
+	if comp & 16: color += Color.WHITE; count += 1
+	if comp & 32: color += Color(0.2, 0.1, 0.3); count += 1
+	if comp & 64: color += Color.GOLD; count += 1
+	if comp & 128: color += Color.CYAN; count += 1
+	if count > 0: return color / count
 	return Color.BLACK
