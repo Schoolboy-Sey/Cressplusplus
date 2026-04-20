@@ -16,6 +16,8 @@ static inline int ctz64(uint64_t mask) {
 
 void SimulationManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("run_step"), &SimulationManager::run_step);
+	// D_Method is a preprocessor macro that resolves the string for c++. Inside of ClassDB is a static class method called bind_method. "&" - find the physical location of 
+	// SimulationManager in RAM, which is needed in c++ to find run_step. This allows godot to call the c++ class "run_step"
     ClassDB::bind_method(D_METHOD("generate_new_world", "seed"), &SimulationManager::generate_new_world);
     ClassDB::bind_method(D_METHOD("save_state_snapshot"), &SimulationManager::save_state_snapshot);
     ClassDB::bind_method(D_METHOD("load_state_snapshot"), &SimulationManager::load_state_snapshot);
