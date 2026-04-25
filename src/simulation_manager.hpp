@@ -19,24 +19,32 @@ private:
     std::vector<Tile> grid;
     std::vector<uint64_t> propagation_buffer;
     std::vector<int> active_tiles;
-    std::vector<bool> is_active_map;
+    std::vector<uint8_t> is_active_map; // Changed from bool
     std::vector<int> dirty_propagation_indices;
-    std::vector<bool> is_dirty_map;
+    std::vector<uint8_t> is_dirty_map; // Changed from bool
     
+    // Scent Wavefront Buffers (No dynamic allocation)
+    std::vector<int> wavefront_current;
+    std::vector<int> wavefront_next;
+
     static const int MAX_ENTITIES = 4096;
+    static const uint16_t EMPTY_TILE = 65535; // The Sentinel
+
     std::vector<uint32_t> entity_coordinate;
     std::vector<uint32_t> entity_intent;
     std::vector<uint32_t> entity_flags;
     std::vector<uint8_t>  entity_base_weight;
     std::vector<uint8_t>  entity_diet;
     std::vector<uint8_t>  entity_mutation;
+    std::vector<uint8_t>  entity_tier;
+    std::vector<uint8_t>  entity_heading;
+    std::vector<uint8_t>  entity_sated_timer;
     std::vector<int8_t>   entity_velocity;
     std::vector<uint8_t>  entity_team;
-    std::vector<uint16_t> entity_generation;
-    std::vector<bool>     entity_active;
+    std::vector<uint8_t>  entity_active; // Changed from bool
     
     std::vector<int>      available_entities;
-    std::vector<int>      unit_grid;
+    std::vector<uint16_t> unit_grid; // Changed from int
 
     std::vector<Tile>     snapshot_grid;
     std::vector<uint32_t> snapshot_entity_coordinate;
@@ -45,9 +53,8 @@ private:
     std::vector<uint8_t>  snapshot_entity_base_weight;
     std::vector<int8_t>   snapshot_entity_velocity;
     std::vector<uint8_t>  snapshot_entity_team;
-    std::vector<uint16_t> snapshot_entity_generation;
-    std::vector<bool>     snapshot_entity_active;
-    std::vector<int>      snapshot_unit_grid;
+    std::vector<uint8_t>  snapshot_entity_active; // Changed from bool
+    std::vector<uint16_t> snapshot_unit_grid; // Changed from int
 
     int map_width = 32;
     int map_height = 32;
