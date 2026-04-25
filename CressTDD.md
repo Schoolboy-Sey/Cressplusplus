@@ -9,7 +9,6 @@
 ## **1\. MEMORY MAP (The 16-Byte Coordinate)**
 
 Every physical coordinate on the map is represented by exactly 16 bytes. There are no object-oriented "Tile" classes.
-In every instance, branchless c++ functions must be used where it is the most efficient option.
 
 ### **Byte 1: The Static State (uint8\_t)**
 
@@ -56,7 +55,9 @@ This is connected to a lookup table that determines the tile that it transforms 
 
 * **Bits 0-7:** Bitflag that represents what types of Mana are in the tile
 
-### **Byte 14-16: RESERVED/ PADDING (uint8\_t)** Keeps the tile in a 16byte chunk for easiest CPU processing, can use for later. 
+### **Byte 14-15: The Imprint Field (uint16\_t)** See Ecosystem and Biological Loop
+
+### **Byte 16: RESERVED/ PADDING (uint8\_t)** Keeps the tile in a 16byte chunk for easiest CPU processing, can use for later. 
 
 * **Bits 0-7:**
 
@@ -360,98 +361,488 @@ When the Chunk Manager wakes up a 32x32 area, this is the unyielding order of op
    * **WIPE THE STACK.** The Tile is wiped completely clean of 64-bit effects, ready to receive the Write Buffer for the next step.  
 8. **Biomes Propagate:** Every step, 3 random tiles check their neighbors for evolution rules, like ground \+ forest \= sapling replaces ground. 
 
-ENTITY COMPONENT SYSTEM (TDD)
-Paradigm: Pure Structure of Arrays (SoA)
-Combat: Threshold-Based Mass Resolution (No HP)
-Memory Bound: Sized strictly for L1/L2 Cache efficiency.
+# **ECOSYSTEM & BIOLOGICAL LOOP (TDD ADDENDUM)(EDIT)**
 
-1. THE ECS MEMORY ARRAYS (The Data)
-Entities do not exist as objects. They are simply an index (e.g., Entity 42) shared across multiple parallel, flat arrays.
+**Architecture Type:** Data-Oriented Design (DOD) / Discrete Cellular Automata **Paradigm:** Excitable Media / Binary State AI **Goal:** Create a self-sustaining, thermodynamic ecosystem that dictates AI migration and biome mutation without floating-point math, complex state machines, or interference with the kinetic combat engine.
+
+---
+
+## **1\. MEMORY MAP UPDATES**
+
+To support biological loops without expanding the 16-byte chunk, we utilize the remaining padding and expand the flat ECS arrays.
+
+### **The Grid: The Imprint Field (Bytes 14-15)**
+
+The previously reserved padding bytes are combined into a single `uint16_t`. This acts as a localized, 16-bit Excitable Media Cellular Automaton.
+
+* **Bits 0-15:** Divided into eight 2-bit pairs. Each pair corresponds exactly to the 8 bitflags in `Ambient_Mana` (Byte 13).  
+* This creates a distinct, mathematically propagating "scent wave" for every type of mana in the game.
+
+### **The ECS: Diet and Binary States**
+
+Three additions to the parallel entity arrays to govern biological needs:
+
+* `uint8_t Entity_Diet[MAX_UNITS]` \- A bitmask aligning with `Ambient_Mana`. Defines what a unit eats (e.g., `00000001` \= Plant Eater, `00000100` \= Fire Eater).  
+* `uint8_t Entity_Timers[MAX_UNITS]` \- A simple countdown array for biological refractory periods.  
+* `Entity_Flags[MAX_UNITS]` (Update) \- Addition of `constexpr uint32_t FLAG_SATED = 1 << 3;`.
+
+---
+
+## **2\. THE IMPRINT FIELD (Excitable Media CA)**
+
+To allow herbivores to track specific mana types over long distances without infinitely flooding the map, the Imprint Field executes a 4-state CA wave.
+
+### **The 4 States (Per 2-Bit Pair)**
+
+* `11` (3): **Source** (The physical object emitting the signal, e.g., a Tree).  
+* `10` (2): **Pulse** (The active wavefront).  
+* `01` (1): **Trail** (The cooling refractory state).  
+* `00` (0): **Empty** (Neutral grid).
+
+**Propagation Rules (The Bitwise OR & Degrade)** To avoid the SIMD bottleneck of calculating "Exactly One Neighbor", the Imprint Field uses a hyper-fast, cascading `OR` degradation rule.
+
+* `11` (3): **Source** \* `10` (2): **Pulse** \* `01` (1): **Trail** \* `00` (0): **Empty** **The Branchless Loop:**  
+1. **The Merge:** The CPU shifts the states of the N, S, E, W neighbors and bitwise `OR`s them together to see if an active wave exists nearby.  
+2. **The Degrade:** \* If `00 (Empty)` AND the neighbor `OR` check contains a Pulse/Source \-\> Becomes `10 (Pulse)`.  
+   * If `10 (Pulse)` \-\> Unconditionally degrades to `01 (Trail)`.  
+   * If `01 (Trail)` \-\> Unconditionally degrades to `00 (Empty)`.  
+   * If `11 (Source)` \-\> Unconditionally remains `11 (Source)`.
+
+Because `Pulse` leaves a `Trail` that cannot be immediately overwritten, the wave is forced to expand outward as a hollow ring. This eliminates neighbor-counting, reducing the AVX2 math to under 5 clock cycles per 16 tiles.
+
+---
+
+## **3\. THE BIOLOGICAL LOOP (Feeding & Regrowth)**
+
+The ecosystem is driven by the direct consumption and mutation of the Grid's base states (`Composition` and `Ambient_Mana`).
+
+### **A. Herbivore Feeding (The Consumption Action)**
+
+When an herbivore steps onto a tile, it attempts to feed via a bitwise `AND` operation: `if (Grid[pos].Ambient_Mana & Entity_Diet[id])`
+
+1. The matching `Ambient_Mana` bit is cleared from the tile.  
+2. The tile's `Composition` (Byte 1\) is forcefully overwritten to `Barren` (or an equivalent depleted state).  
+3. The herbivore is fully sated.
+
+### **B. World Mutation (The Regrowth Action, WIP)**
+
+During **Step 8**, the Grid heals itself naturally.
+
+1. Random tiles are selected on the map. If there is a plant mana pulse on the grid, a plant can grow there.
+
+---
+
+## **4\. DATA-ORIENTED AI & Scent Tracking**
+
+AI logic utilizes bit-shifts and boolean flags during the Planning Phase, ensuring ultra-fast intent calculation without complex state machines.
+
+### **A. Herbivore Pathing (Riding the Wave)**
+
+Herbivores do not calculate paths; they "bob upstream" against the Imprint Field wave.
+
+1. The AI reads the 2-bit state of its 4 orthogonal neighbors corresponding to its `Entity_Diet` index.  
+2. **Priority 1:** If a neighbor is `Source (11)`, step toward it to eat.  
+3. **Priority 2:** If the herbivore is standing on or near a `Pulse (10)`, it looks for a `Trail (01)`. It steps onto the `Trail`, knowing mathematically the Pulse occupied that space one step prior, leading directly toward the Source.  
+4. **Priority 3:** Wait for the next wave to pass.
+
+If they are not hungry, this behavior changes. They instead “surf the wave” and orbit the food or return to their biome. 
+
+### **B. Carnivore Pathing & Satiation (Binary AI Inversion)**
+
+Carnivore aggression is dictated entirely by a binary flag, dictating how it reads Byte 4 (`pathing_scent`).
+
+**The Kill Event:** If a Carnivore wins a Clash against a prey entity: `Entity_Flags[predator_id] |= FLAG_SATED;` `Entity_Timers[predator_id] = PRESET_DURATION;`
+
+**The Planning Phase:**
+
+* `if (!(Entity_Flags[id] & FLAG_SATED))` **(Hungry):** The carnivore reads Byte 4 (Prey/Player Scent) and paths toward the highest concentration.  
+* `if (Entity_Flags[id] & FLAG_SATED)` **(Sated):** The carnivore ignores Byte 4 entirely. It searches for `Empty (00)` tiles or a designated "Den" imprint to sleep off the meal, visually turning away from the player.
+
+**Timer Resolution:** At the end of the Execution Phase, the engine sweeps the `Entity_Timers` array. If a timer hits 0, `Entity_Flags[id] &= ~FLAG_SATED;`, and the carnivore begins hunting again on the next turn.
+
+# **SHADOW BUFFER CA PIPELINE**
+
+The global architecture remains a strict 16-byte `std::vector<Tile>`. To process the 16-bit Cellular Automata, the engine provisions a static, thread-local memory buffer sized exactly for a 32x32 chunk (1,024 tiles), plus a 1-tile border (padding) to handle neighbor lookups without bounding checks.
+
+C++  
+// 34x34 to include a 1-tile border for N/S/E/W lookups  
+// alignas(32) guarantees perfect AVX2 memory alignment  
+alignas(32) thread\_local uint16\_t Shadow\_Buffer\[1156\];   
+alignas(32) thread\_local uint16\_t Result\_Buffer\[1156\];
+
+### **SHADOW BUFFER CA PIPELINE (Updated for SIMD Alignment)**
+
+**Architecture Type: Temporal SoA / L1 Cache Shadow Buffer Goal: Maximize Cellular Automata throughput by restructuring AoS memory into AVX2-aligned SoA memory inside the CPU's L1 cache, avoiding hardware segfaults via Stride Padding.**
+
+**A. The AVX2 Memory Stride To utilize `_mm256_load_si256` (Aligned Loads), memory rows must be strictly divisible by 32 bytes (16 `uint16_t` tiles). A 32x32 chunk with a 1-tile border requires 34 tiles per row, which breaks alignment and causes a hardware crash.**
+
+**To fix this, the Shadow Buffer is horizontally padded to 48 tiles wide. The SIMD processor will read the ghost cells and safely ignore them.**
+
+**C++**
+
+**// 48x34 grid (Width padded to nearest multiple of 16 for AVX2 alignment)**
+
+**// alignas(32) guarantees the starting address is perfectly aligned.**
+
+**alignas(32) thread\_local uint16\_t Shadow\_Buffer\[1632\];** 
+
+**alignas(32) thread\_local uint16\_t Result\_Buffer\[1632\];**
+
+**B. The Shadow Pipeline**
+
+1. **The Extraction Pass (AoS \-\> SoA): A scalar loop reads the `Imprint_Field` (Bytes 14-15) from the main Grid and packs them into the `Shadow_Buffer`. The remaining 14 padding tiles per row are left as `0`.**  
+2. **The SIMD Pass: The CPU fetches 16 tiles simultaneously. Because the row width is exactly 48, the SIMD cursor never misaligns when wrapping to the next row.**  
+3. **The Injection Pass: The scalar loop writes the calculated `Result_Buffer` (ignoring the padding) back into the 14th and 15th bytes of the master Grid.**
+
+## **1\. ECS MEMORY MAP ADDITIONS**
+
+To support dynamic evolution without object-oriented overhead, a single byte array is added to the Entity Component System.
+
+* `uint8_t Entity_Mutation[MAX_UNITS];`  
+  * Stores *only* the acquired, foreign mana bits an entity consumes outside of its native `Entity_Diet`.  
+  * Initialized to `0` upon spawning.
+
+## **2\. THE EVOLUTION TRIGGERS (Bitwise Inheritance)**
+
+Evolution is triggered during the Execution Phase (Step 3: The Clash / Step 7: Feeding). It relies on identifying foreign mana and merging it into the entity's genetic makeup.
+
+### **A. Herbivore Evolution (The XOR Delta)**
+
+When an herbivore feeds on a tile, it compares the tile's `Ambient_Mana` against its own `Entity_Diet`.
+
+1. **The Delta Calculation:** `uint8_t foreign_mana = (Grid[pos].Ambient_Mana ^ Entity_Diet[id]) & Grid[pos].Ambient_Mana;` *(Ensures we only grab bits the tile has that the entity doesn't).*  
+2. **The Inheritance:** If the tile contained foreign mana, the herbivore absorbs it: `Entity_Mutation[id] |= foreign_mana;`
+
+### **B. Carnivore Evolution (The OR Merge)**
+
+Because a carnivore's diet is the act of hunting, it inherits the complexity of whatever it kills.
+
+1. **The Kill:** A Wolf successfully Clashes with and kills an herbivore.  
+2. **The Inheritance:** The Wolf absorbs the prey's total accumulated identity. `uint8_t prey_identity = Entity_Diet[prey_id] | Entity_Mutation[prey_id];` `uint8_t foreign_meat = (prey_identity ^ Entity_Diet[wolf_id]) & prey_identity;` `Entity_Mutation[wolf_id] |= foreign_meat;`
+
+## **3\. THE 3-TIER EVOLUTION SYSTEM (Foreign Popcount)**
+
+An entity's evolutionary tier is dictated strictly by the number of *extra* mana bits it has acquired. This is calculated branchlessly using the compiler intrinsic `__builtin_popcount()`.
+
+**The Complexity Calculation:** `uint8_t extra_mana = __builtin_popcount(Entity_Mutation[id]);`
+
+**The Tiers:**
+
+* **Tier 1 (Base):** `extra_mana == 0` (The entity has only consumed its native diet).  
+* **Tier 2 (Evolved):** `extra_mana >= 1` (The entity has absorbed 1 or 2 foreign mana types).  
+* **Tier 3 (Apex):** `extra_mana >= 3` (The entity has absorbed 3 or more foreign mana types).
+
+Recalculating an entity's evolutionary tier using `__builtin_popcount` during combat or movement loops wastes CPU cycles on static data.
+
+**ECS Memory Additions:**
+
+* `uint8_t Entity_Mutation[MAX_UNITS]` \- Stores the acquired foreign mana bits.  
+* `uint8_t Entity_Tier[MAX_UNITS]` \- Caches the popcount integer (0, 1, 2, 3+).
+
+**The Evolution Trigger:** When a unit successfully feeds or kills, the engine recalculates the Tier *once*.
 
 C++
-constexpr int MAX_UNITS = 4096;
 
-// --- Spatial & Identity ---
-uint32_t Entity_Coordinates[MAX_UNITS]; // The 1D index on the Grid array
-uint8_t  Entity_Team[MAX_UNITS];        // 0=Player, 1=Enemy, 2=Neutral, 3=Projectile
+// Inside the kill\_entity / feeding logic:
 
-// --- The Physics Engine ---
-uint8_t  Entity_BaseWeight[MAX_UNITS];  // The innate mass (0-255). Bosses might be 200.
-uint32_t Entity_Flags[MAX_UNITS];       // Bitmask for abilities (Bounce, Push, Piercing)
+Entity\_Mutation\[predator\_id\] |= foreign\_mana;
 
-// Examples of Entity Flags
-constexpr uint32_t FLAG_BOUNCE = 1 << 0;
-constexpr uint32_t FLAG_PUSH   = 1 << 1;
-constexpr uint32_t FLAG_FLYING = 1 << 2;
-2. THE TIMELINE QUEUE (Variable Speed)
-Because units have variable speeds and the game operates on a 10-Step turn, we don't calculate pathfinding on the fly. We pre-calculate their intents into a dense 2D array.
+// Recalculate and Cache
+
+Entity\_Tier\[predator\_id\] \= \_\_builtin\_popcount(Entity\_Mutation\[predator\_id\]);
+
+// Immediately update the physical stat arrays based on the new Tier
+
+Entity\_BaseWeight\[predator\_id\] \= calculate\_new\_weight(Entity\_Tier\[predator\_id\]);
+
+Entity\_ActionPoints\[predator\_id\] \= calculate\_new\_speed(Entity\_Tier\[predator\_id\]);
+
+During the 60 FPS combat Clash, the engine simply reads the pre-scaled `Entity_BaseWeight`, keeping the physics resolution branchless and devoid of complex math.
+
+## **6\. ENTITY EVOLUTION & METABOLISM (LUT-Based Branching)**
+
+This section overrules previous sections where applicable. 
+
+**Architecture Type:** $O(1)$ Sparse Matrix & Branchless Two's Complement Masking
+
+**Goal:** Support infinite biological permutations without causing an art-pipeline bottleneck. Entities can consume any mana type. If a specific 3D model/branch exists for that interaction, they change species. If it does not, they mutate their underlying stats natively.
+
+### **A. Memory Map & Global Registries**
+
+Evolution merges the Grid's "Composition" philosophy with the Entity Component System.
+
+**1\. ECS Array Additions:**
+
+* std::vector\<uint8\_t\> entity\_species: The base identifier (0-255). Directly maps to a specific Godot 3D mesh (e.g., 10 \= Wolf, 45 \= Hellhound).  
+* std::vector\<uint8\_t\> entity\_mutation: A bitmask storing all consumed foreign mana bits.  
+* std::vector\<uint8\_t\> entity\_tier: Cached \_\_builtin\_popcount(entity\_mutation).
+
+**2\. The Global DNA Lookup Tables (Loaded at Startup):**
+
+* uint8\_t SPECIES\_BASE\_WEIGHT\[256\]  
+* int8\_t SPECIES\_BASE\_VELOCITY\[256\]  
+* uint8\_t EVOLUTION\_PATHS\[256\]\[8\]: The 2-Kilobyte Sparse Matrix. \[Current\_Species\]\[Consumed\_Mana\_Bit\] returns the New\_Species\_ID. If no authored path exists, it returns 0.
+
+### **B. The Dual-Path Paradigm**
+
+When an entity consumes a tile's ambient\_mana, the engine processes two realities simultaneously and uses bitwise masks to apply the correct outcome based on the EVOLUTION\_PATHS lookup.
+
+* **Reality A (True Evolution):** The LUT returns a valid ID. The entity becomes a brand new species. Its entity\_mutation stack is wiped to 0, its entity\_tier drops to 0, and it inherits the base physical stats of the new species from the global LUTs.  
+* **Reality B (Metabolic Mutation):** The LUT returns 0. The entity retains its current species, but the consumed mana bit is injected into its entity\_mutation stack. Its entity\_tier increases, applying a generic scaling formula (e.g., \+20 Weight, \-1 Velocity) to its *current* stats.
+
+### **C. The Branchless Execution Pipeline**
+
+The trigger\_feeding function must execute without if/else statements to preserve the CPU pipeline.
+
+1. **The $O(1)$ Fetch:** Query EVOLUTION\_PATHS using the entity's current species and the consumed mana bit.  
+2. **Mask Generation:** Generate two All-or-Nothing masks based on whether the fetched ID is \> 0.  
+   * evo\_mask (0xFF if true, 0x00 if false).  
+   * mut\_mask (the bitwise NOT of the evo\_mask).  
+3. **Resolve Identity & Stack:** Apply the masks to overwrite entity\_species. Use the mut\_mask against the updated mutation stack; this naturally wipes the stack to 0 if an evolution occurred, or preserves the new mana bit if it was a generic mutation.  
+4. **Resolve Tier:** Run \_\_builtin\_popcount() on the newly resolved mutation stack. Because of Step 3, this mathematically cascades perfectly (returning 0 for fresh evolutions, or the correct new tier for mutations).  
+5. **Resolve Physics:** Calculate the physical stats for Reality A (LUT values) and Reality B (current stats \+ tier modifiers). Use the masks to commit the correct stats to the ECS.
+
+### **D. The Godot Rendering Bridge**
+
+This architecture completely decouples visual logic from physical logic.
+
+* Godot reads the entity\_species byte to load the core .gltf model (e.g., if 10, load wolf.gltf).  
+* Godot reads the entity\_mutation byte to apply dynamic shaders or particle effects on top of that base model (e.g., if the FIRE\_BIT is active in the mutation stack, attach a fire particle emitter to the wolf's spine).  
+* This allows the player to visually identify a creature's capabilities even if it hasn't formally evolved into a new handcrafted species.
+
+Here is the flawless, 100% branchless C++ implementation:
 
 C++
-struct ActionIntent {
-    uint8_t action_type;  // 0=Wait, 1=Move, 2=Attack, 3=AOE_Cast
-    int target_index;     // Where they are moving/casting
-    uint64_t payload;     // What bits are they injecting? (For spells)
-};
 
-// The Master Timeline: Every unit has exactly 10 slots per turn.
-// A slow Boss might only have an Action in slot [4] and [9].
-// A fast Rogue might have Actions in slots [1], [3], [5], [7], [9].
-ActionIntent Entity_Timeline[MAX_UNITS][10];
-Why this is fast: During Step 5, the CPU simply loops through Entity_Timeline[id][5]. If the action_type is Wait, it skips it in 1 clock cycle.
+inline void trigger\_feeding(uint16\_t entity\_id, int tile\_index, uint8\_t mana\_bit\_index) {
 
-3. COMBAT RESOLUTION (Newton's Third Law)
-When an entity attempts to move into an occupied tile, the engine resolves the clash using the Effective Weight.
+    uint8\_t current\_species \= entity\_species\[entity\_id\];
 
-Step 1: Calculate Effective Weight
-Before a unit strikes, the engine reads the Grid's effect_stack beneath them.
-
-C++
-int Effective_Attacker_Weight = Entity_BaseWeight[attacker_id];
-int Effective_Defender_Weight = Entity_BaseWeight[defender_id];
-
-// O(1) Array Lookup: Does the tile have Poison or Fire? Subtract it!
-Effective_Attacker_Weight -= EFFECT_WEIGHTS[Grid[attacker_pos].effect_stack];
-Effective_Defender_Weight -= EFFECT_WEIGHTS[Grid[defender_pos].effect_stack];
-Step 2: The Clash
-
-C++
-if (Effective_Attacker_Weight > Effective_Defender_Weight) {
-    // VICTORY: Defender is instantly destroyed. Attacker moves into the tile.
-    kill_entity(defender_id);
-    move_entity(attacker_id, target_pos);
-} 
-else {
-    // DEFEAT / TIE: Hitting a heavier object hurts. 
     
-    // Do they have the Bounce safety net?
-    if (Entity_Flags[attacker_id] & FLAG_BOUNCE) {
-        // Safe! They bounce back to their origin. Attack canceled.
-        trigger_bounce_animation(attacker_id);
-    } 
-    else {
-        // Crushed! They struck a heavier object without a safety net.
-        kill_entity(attacker_id);
-    }
+
+    // O(1) Array Lookup. Returns 0 if no path exists.
+
+    uint8\_t new\_species \= EVOLUTION\_PATHS\[current\_species\]\[mana\_bit\_index\];
+
+    // 1\. GENERATE THE ALL-OR-NOTHING MASKS
+
+    // If new\_species \> 0:  evo\_mask \= 0xFF (All 1s), mut\_mask \= 0x00 (All 0s)
+
+    // If new\_species \== 0: evo\_mask \= 0x00 (All 0s), mut\_mask \= 0xFF (All 1s)
+
+    uint8\_t evo\_mask \= \-static\_cast\<uint8\_t\>(new\_species \!= 0);
+
+    uint8\_t mut\_mask \= \~evo\_mask;
+
+    // 2\. RESOLVE SPECIES
+
+    entity\_species\[entity\_id\] \= (new\_species & evo\_mask) | (current\_species & mut\_mask);
+
+    // 3\. RESOLVE MUTATION STACK
+
+    // If evolving, mut\_mask is 0x00, so the mutation stack is instantly wiped to 0\.
+
+    // If mutating, mut\_mask is 0xFF, so the new mana bit is safely added.
+
+    uint8\_t mutated\_stack \= entity\_mutation\[entity\_id\] | (1 \<\< mana\_bit\_index);
+
+    entity\_mutation\[entity\_id\] \= mutated\_stack & mut\_mask;
+
+    // 4\. RESOLVE TIER (The Popcount Cascade)
+
+    // Because we just wiped the mutation stack to 0 if evolving, 
+
+    // the popcount will naturally return 0\! No mask needed\!
+
+    uint8\_t old\_tier \= entity\_tier\[entity\_id\];
+
+    uint8\_t new\_tier \= \_\_builtin\_popcount(entity\_mutation\[entity\_id\]);
+
+    entity\_tier\[entity\_id\] \= new\_tier;
+
+    // 5\. RESOLVE PHYSICAL STATS
+
+    // Did the tier go up? (Returns 1 if yes, 0 if no)
+
+    uint8\_t tier\_diff \= new\_tier \- old\_tier; 
+
+    // Calculate Reality A: True Evolution
+
+    // (Note: If new\_species is 0, it safely reads index 0 of the global array)
+
+    uint8\_t evo\_weight \= SPECIES\_BASE\_WEIGHT\[new\_species\];
+
+    int8\_t  evo\_vel    \= SPECIES\_BASE\_VELOCITY\[new\_species\];
+
+    // Calculate Reality B: Metabolic Mutation
+
+    uint8\_t mut\_weight \= entity\_base\_weight\[entity\_id\] \+ (20 \* tier\_diff);
+
+    int8\_t  mut\_vel    \= entity\_velocity\[entity\_id\] \- tier\_diff;
+
+    // Branchless Commit: The masks instantly delete the false reality.
+
+    entity\_base\_weight\[entity\_id\] \= (evo\_weight & evo\_mask) | (mut\_weight & mut\_mask);
+
+    entity\_velocity\[entity\_id\]    \= (evo\_vel & evo\_mask)    | (mut\_vel & mut\_mask);
+
 }
-4. PROJECTILES & SPELLS
-You mentioned spells can either be direct Area of Effect (AOE) injections or traveling projectiles. Both utilize the systems we have already built.
 
-A. The Projectile (Entity-Based)
-A fireball is just an entity.
+## **4\. PHYSICAL BALANCING & METABOLISM**
 
-It is spawned into the ECS arrays with Team = 3 (Projectile).
+To prevent Apex predators from infinitely sweeping the map and to give the non-evolving Player a tactical advantage, an entity's physical stats and metabolism scale automatically with its tier.
 
-It is given a BaseWeight of 30 (so it destroys anything under 30 weight, but shatters against a 40-weight Stone Wall).
+### **A. Inverse Kinematics (Weight vs. Speed)**
 
-Its Entity_Timeline is filled with 10 consecutive Move commands (so it travels 10 tiles in a single turn).
+Whenever an entity's `extra_mana` tier increases, its physics profile updates:
 
-If it shatters against a wall or an enemy, its "Death Event" executes a tiny script: Grid[pos].effect_stack |= FIRE_BIT.
+* `BaseWeight` increases dramatically, making it nearly impossible to defeat in a direct kinetic Clash.  
+* `Action_Points` (Speed) strictly decrease. A Tier 1 unit may move multiple tiles per turn, while an Apex beast becomes a lumbering juggernaut. Its low speed allows the player to kite it, outmaneuver it, or trap it using 3D terrain modification.
 
-B. The AOE Spell (Grid-Based)
-If a player casts "Pillar of Flame" targeting 3 tiles on Step 4:
+### **B. The Metabolic Burn (Satiation Scaling)**
 
-The player's Entity_Timeline[player_id][4] is set to action_type = Cast.
+A heavier, mutated unit requires vastly more ecological energy to sustain its mass.
 
-When Step 4 arrives, the engine takes the payload (the FIRE_BIT) and writes it directly into the Double Buffer for those 3 tiles.
+* The `Entity_Timers` array tracks starvation.  
+* When calculating the timer decay at the end of a turn, the base decay is multiplied by `(1 + extra_mana)`.  
+* An Apex beast will burn through its Satiation timer significantly faster. If it wipes out its local biome, its slow speed prevents it from reaching a new biome in time, causing it to naturally starve and restoring balance.
 
-The Physics/Chemistry engine takes over on Step 5.
+## **5\. THE 3D GODOT RENDERING BRIDGE**
+
+The C++ backend processes everything as a flat 2D data grid. It passes the 10-byte Entity Struct (including `BaseWeight`, `Entity_Diet`, and `Entity_Mutation`) over the Vulkan bridge to the Godot frontend. Godot translates this data into a rich 3D environment.
+
+1. **3D Mesh Swapping:** A lightweight Godot script attached to the entity's visual node reads the `extra_mana` popcount.  
+   * If `0`, instantiate `base_mesh.gltf`.  
+   * If `1` or `2`, instantiate `dire_mesh.gltf`.  
+   * If `3+`, instantiate `apex_mesh.gltf` and increase the 3D scale transform.  
+2. **Dynamic Spatial Materials:** A Godot Spatial Shader reads the `Entity_Mutation` byte. It applies additive visual effects to the 3D mesh based on the active bits.  
+   * If the `Magic` bit is active, it enables a purple emission map on the material.  
+   * If `Fire` is active, it spawns a 3D GPU Particle system (flames) attached to the creature's bones.  
+   * The 3D visuals dynamically stack to match the exact bitwise inheritance the engine calculated.
+
+# **(ADDENDUM: SCALED UNIT INTERACTIONS)**
+
+**Architecture Type:** Data-Oriented Spatial Partitioning / $O(1)$ Occupancy Grid
+
+**Execution Phase:** Step 3 (The Clash) / Step 5 (Movement)
+
+**Goal:** Resolve kinetic clashes and movement for thousands of entities simultaneously across a global map without iterating through entity-to-entity loops, maintaining microsecond execution times.
+
+## **1\. THE $O(N^2)$ BOTTLENECK AVOIDANCE**
+
+In a standard Object-Oriented engine, checking for collisions requires looping through the active entity list and comparing spatial coordinates. If 10,000 units move, the CPU performs up to 100,000,000 coordinate checks per step. This crashes the framerate.
+
+To solve this, Cressplusplus utilizes **Spatial Partitioning** where the Grid itself acts as the definitive matchmaking authority. Entities never check other entities; they only ask the Grid who is standing on a specific tile.
+
+## **2\. MEMORY MAP: THE OCCUPANCY LAYER**
+
+To keep the primary 16-byte Tile struct pristine for Vulkan and the Cellular Automata, entity collision is handled by a parallel, flat 1D array that perfectly mirrors the map's geometry.
+
+* uint16\_t Occupancy\_Grid\[MAX\_TILES\];  
+  * This array acts as a registry.  
+  * The value stored at any index is the Entity\_ID of the unit currently occupying that physical space.  
+  * A value of 0 indicates the tile is empty (Entity IDs begin at 1).
+
+*Because Occupancy\_Grid is a contiguous block of uint16\_t, checking a tile's occupancy is a single, $O(1)$ direct memory fetch that executes instantly.*
+
+## **3\. THE EXECUTION PIPELINE (Branchless Matchmaking)**
+
+During the Execution Phase, entities attempt to execute the movement vectors they locked in during the Planning Phase. The engine processes these intents using the Occupancy Grid.
+
+### **Phase A: The Read (Intent Check)**
+
+When Unit A attempts to move to a target tile:
+
+1. The engine performs a direct lookup: uint16\_t target\_id \= Occupancy\_Grid\[target\_pos\];  
+2. If target\_id \== 0: The tile is empty. The movement succeeds immediately.  
+3. If target\_id \!= 0: A physical Clash is initiated between Unit A and target\_id.
+
+### **Phase B: The Clash Resolution (Kinetic Math)**
+
+Because the engine now has both IDs, it completely bypasses spatial searching and jumps directly into the flat ECS arrays to compare stats.
+
+C++
+
+// 1\. Pull BaseWeights from the ECS
+
+uint8\_t weight\_attacker \= Entity\_BaseWeight\[attacker\_id\];
+
+uint8\_t weight\_defender \= Entity\_BaseWeight\[defender\_id\];
+
+// 2\. Resolve Math
+
+if (weight\_attacker \> weight\_defender) {
+
+    // Attacker wins.
+
+    kill\_entity(defender\_id);
+
+    move\_entity(attacker\_id, target\_pos);
+
+} else {
+
+    // Defender wins or Tie. Check for FLAG\_BOUNCE.
+
+    if (Entity\_Flags\[attacker\_id\] & FLAG\_BOUNCE) {
+
+        trigger\_bounce(attacker\_id); 
+
+    } else {
+
+        kill\_entity(attacker\_id);
+
+    }
+
+}
+
+### **Phase C: The Write (Updating the Grid)**
+
+When a unit successfully moves or is killed, the Occupancy Grid must be updated to maintain the integrity of the spatial registry.
+
+1. **Movement:** The unit writes its ID to the new tile and clears its old tile.  
+   Occupancy\_Grid\[new\_pos\] \= entity\_id;  
+   Occupancy\_Grid\[old\_pos\] \= 0;  
+2. **Death:** The kill\_entity() function automatically clears the Occupancy Grid at the deceased unit's location, freeing the tile for the next unit.
+
+### **SCALED UNIT INTERACTIONS (Updated for Sync Safety)**
+
+To prevent the parallel `Occupancy_Grid` and the 16-byte master `Grid` from falling out of sync, the ECS operates through a strictly enforced inline wrapper.
+
+**The Unified Movement Wrapper:**
+
+C++
+
+inline void move\_entity(uint16\_t entity\_id, uint32\_t old\_pos, uint32\_t new\_pos) {
+
+    // 1\. Update the O(1) Matchmaking Grid (For Clashes/Pathing)
+
+    Occupancy\_Grid\[old\_pos\] \= 0;
+
+    Occupancy\_Grid\[new\_pos\] \= entity\_id;
+
+    // 2\. Update the 16-Byte Hardware Grid (For Grid ALU Damage/Traps)
+
+    Grid\[old\_pos\].effect\_stack &= \~FLAG\_HAS\_ENTITY; 
+
+    Grid\[new\_pos\].effect\_stack |= FLAG\_HAS\_ENTITY;  
+
+    
+
+    // 3\. Update the ECS Spatial Array (For Rendering/Logic)
+
+    Entity\_Coordinates\[entity\_id\] \= new\_pos;
+
+}
+
+If an entity is destroyed during a Clash, the `kill_entity()` function runs the exact same three-part clearing process.
+
+## **4\. CHUNK-BASED ECS TRACKING (For Godot Rendering)**
+
+While the math is handled globally, the Vulkan renderer cannot draw 50,000 entities across a 1,000,000-tile map without culling them. The C++ backend must feed Godot only the entities that exist within the active camera bounds.
+
+Instead of iterating through MAX\_UNITS to find out who is on camera, the engine uses Localized Chunk Registries.
+
+* **The Registry:** Every 32x32 Chunk Manager maintains a lightweight, dynamic array of Entity\_IDs representing only the units currently standing inside its borders.  
+* **The Hand-off:** When a unit's movement crosses a chunk boundary, the move\_entity() function removes the ID from the old Chunk's registry and appends it to the new Chunk's registry.  
+* **The Render Call:** When Godot asks the engine, "What do I render?", the C++ bridge simply passes the registries of the visible chunks. Godot ignores the rest of the world, allowing the global simulation to run at full speed in the background without incurring any rendering overhead.
+
