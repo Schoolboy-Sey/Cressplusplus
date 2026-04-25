@@ -11,14 +11,14 @@ func _ready():
 
 func _setup_checkboxes():
 	# Clear existing if any (re-ready safety)
-	for container in [%BiomeCheckboxes, %TransStartCheckboxes, %TransEndCheckboxes, %UnitManaCheckboxes]:
+	for container in [%BiomeCheckboxes, %TransStartCheckboxes, %TransEndCheckboxes, %UnitManaCheckboxes, %UnitDietCheckboxes]:
 		for child in container.get_children(): child.queue_free()
 	
-	for container in [%BiomeCheckboxes, %TransStartCheckboxes, %TransEndCheckboxes, %UnitManaCheckboxes]:
+	for container in [%BiomeCheckboxes, %TransStartCheckboxes, %TransEndCheckboxes, %UnitManaCheckboxes, %UnitDietCheckboxes]:
 		for i in range(8):
 			var cb = CheckBox.new()
 			cb.text = mana_names[i]
-			if container != %UnitManaCheckboxes:
+			if container != %UnitManaCheckboxes and container != %UnitDietCheckboxes:
 				cb.toggled.connect(_on_biome_checkbox_changed)
 			container.add_child(cb)
 			
@@ -267,16 +267,24 @@ func _on_unit_selected(index):
 	%UnitNameInput.text = u.name
 	%UnitWeightInput.value = u.weight
 	%UnitVelInput.value = u.velocity
+	%UnitSpeciesInput.value = u.get("species", 0)
 	_set_checkbox_id(%UnitManaCheckboxes, int(u.get("mana", 0)))
+	_set_checkbox_id(%UnitDietCheckboxes, int(u.get("diet", 0)))
 	%UnitPushCheck.button_pressed = u.get("push", false)
+	%UnitHerbivoreCheck.button_pressed = u.get("herbivore", false)
+	%UnitCarnivoreCheck.button_pressed = u.get("carnivore", false)
 
 func _on_add_unit_pressed():
 	var unit = {
 		"name": %UnitNameInput.text,
 		"weight": int(%UnitWeightInput.value),
 		"velocity": int(%UnitVelInput.value),
+		"species": int(%UnitSpeciesInput.value),
 		"mana": _get_checkbox_id(%UnitManaCheckboxes),
-		"push": %UnitPushCheck.button_pressed
+		"diet": _get_checkbox_id(%UnitDietCheckboxes),
+		"push": %UnitPushCheck.button_pressed,
+		"herbivore": %UnitHerbivoreCheck.button_pressed,
+		"carnivore": %UnitCarnivoreCheck.button_pressed
 	}
 	var found = false
 	for i in range(data.units.size()):

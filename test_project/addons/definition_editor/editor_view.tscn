@@ -399,9 +399,16 @@ text = "Base Velocity:"
 [node name="UnitVelInput" type="SpinBox" parent="VBox/MainArea/UnitsPanel/UnitEditor/Grid"]
 unique_name_in_owner = true
 layout_mode = 2
-min_value = 1.0
 max_value = 10.0
-value = 1.0
+
+[node name="LSpecies" type="Label" parent="VBox/MainArea/UnitsPanel/UnitEditor/Grid"]
+layout_mode = 2
+text = "Species ID:"
+
+[node name="UnitSpeciesInput" type="SpinBox" parent="VBox/MainArea/UnitsPanel/UnitEditor/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 255.0
 
 [node name="L4" type="Label" parent="VBox/MainArea/UnitsPanel/UnitEditor/Grid"]
 layout_mode = 2
@@ -412,7 +419,18 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="LDiet" type="Label" parent="VBox/MainArea/UnitsPanel/UnitEditor/Grid"]
+layout_mode = 2
+text = "Diet (Mana):"
+
+[node name="UnitDietCheckboxes" type="HFlowContainer" parent="VBox/MainArea/UnitsPanel/UnitEditor/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
 [node name="L5" type="Label" parent="VBox/MainArea/UnitsPanel/UnitEditor/Grid"]
+layout_mode = 2
+text = "Abilities:"
 layout_mode = 2
 text = "Abilities:"
 
@@ -420,6 +438,16 @@ text = "Abilities:"
 unique_name_in_owner = true
 layout_mode = 2
 text = "Has Push"
+
+[node name="UnitHerbivoreCheck" type="CheckBox" parent="VBox/MainArea/UnitsPanel/UnitEditor/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Is Herbivore"
+
+[node name="UnitCarnivoreCheck" type="CheckBox" parent="VBox/MainArea/UnitsPanel/UnitEditor/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Is Carnivore"
 
 [node name="HBox" type="HBoxContainer" parent="VBox/MainArea/UnitsPanel/UnitEditor"]
 layout_mode = 2

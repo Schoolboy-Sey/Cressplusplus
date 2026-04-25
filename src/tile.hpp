@@ -17,13 +17,14 @@
  */
 #pragma pack(push, 1)
 struct Tile {
-    uint8_t composition;        // Physical biome ID
-    uint8_t slope;              // Gravity vectors
-    uint8_t elevation;          // Z-level data
-    uint8_t pathing_scent;      // Scent (bits 0-3), Flags (bits 4-7)
-    uint64_t effect_stack;      // Transient effects
-    uint8_t ambient_mana;       // Available spellcasting fuel
-    uint8_t padding[3];         // L1 Cache alignment
+    uint8_t composition;        // Byte 1: Physical biome ID
+    uint8_t slope_geometry;     // Byte 2: Gravity vectors / shape
+    uint8_t absolute_elevation; // Byte 3: Z-level data
+    uint8_t pathing_scent;      // Byte 4: Scent (bits 0-3), Flags (bits 4-7)
+    uint64_t effect_stack;      // Bytes 5-12: Transient effects
+    uint8_t ambient_mana;       // Byte 13: Available spellcasting fuel
+    uint16_t imprint_field;     // Bytes 14-15: Scent Wave CA
+    uint8_t reserved_padding;   // Byte 16: L1 Cache alignment
 
     // Constants for pathing_scent
     static const uint8_t SCENT_MASK = 0x0F;
@@ -47,7 +48,6 @@ struct Tile {
     }
 
     // Byte 12 Timer Helpers (Bits 56-58 of effect_stack)
-    // We treat 0 as "Trigger" and 1-7 as "Remaining Steps"
     uint8_t get_countdown() const {
         return static_cast<uint8_t>((effect_stack >> 56) & 0x7);
     }

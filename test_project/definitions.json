@@ -3,7 +3,7 @@
 		{
 			"id": 0.0,
 			"name": "Plains",
-			"weight": 0
+			"weight": 0.0
 		},
 		{
 			"id": 1.0,
@@ -73,7 +73,7 @@
 			"flammable": true,
 			"id": 12.0,
 			"name": "Forest/Tree (E+Pl)",
-			"weight": 0
+			"weight": 0.0
 		},
 		{
 			"id": 20.0,
@@ -616,6 +616,17 @@
 			"push": true,
 			"velocity": 1.0,
 			"weight": 9.0
+		},
+		{
+			"carnivore": false,
+			"diet": 8,
+			"herbivore": true,
+			"mana": 8,
+			"name": "Slime",
+			"push": false,
+			"species": 1,
+			"velocity": 0,
+			"weight": 2
 		}
 	]
 }

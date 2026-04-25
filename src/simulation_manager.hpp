@@ -28,6 +28,8 @@ private:
     std::vector<uint32_t> entity_intent;
     std::vector<uint32_t> entity_flags;
     std::vector<uint8_t>  entity_base_weight;
+    std::vector<uint8_t>  entity_diet;
+    std::vector<uint8_t>  entity_mutation;
     std::vector<int8_t>   entity_velocity;
     std::vector<uint8_t>  entity_team;
     std::vector<uint16_t> entity_generation;
@@ -75,15 +77,25 @@ private:
     void _process_propagation_sparse(const std::vector<int>& active_indices);
     void _apply_propagation();
     void _inject_biome_effects();
-    
+    void _process_imprint_waves_simd();
+
     void _resolve_movement_and_clashes();
     void _despawn_entity_internal(int entity_id);
 
+    // Scent Wave Shadow Buffers (Padded for SIMD alignment)
+    // 32x32 chunk + 1-tile border = 34x34, padded to 48 wide = 48x34
+    static const int SHADOW_WIDTH = 48;
+    static const int SHADOW_HEIGHT = 34;
+    alignas(32) uint16_t shadow_buffer[SHADOW_WIDTH * SHADOW_HEIGHT];
+    alignas(32) uint16_t result_buffer[SHADOW_WIDTH * SHADOW_HEIGHT];
+
 public:
     enum EntityFlags {
-        FLAG_BOUNCE = 1 << 0,
-        FLAG_PUSH   = 1 << 1,
-        FLAG_FLYING = 1 << 2,
+        FLAG_BOUNCE    = 1 << 0,
+        FLAG_PUSH      = 1 << 1,
+        FLAG_FLYING    = 1 << 2,
+        FLAG_HERBIVORE = 1 << 3,
+        FLAG_CARNIVORE = 1 << 4,
     };
 
     SimulationManager();
@@ -99,6 +111,8 @@ public:
 
     void set_tile_composition(int x, int z, int composition);
     int get_tile_composition(int x, int z) const;
+    void set_tile_mana(int x, int z, int mask);
+    int get_tile_mana(int x, int z) const;
     void set_tile_effect(int x, int z, uint64_t effect_bit);
     uint64_t get_tile_effects(int x, int z) const;
     void set_impassable(int x, int z, bool impassable);
@@ -117,6 +131,8 @@ public:
     int get_unit_velocity(int entity_id) const;
     int get_unit_flags(int entity_id) const;
     void set_unit_flags(int entity_id, int flags);
+    int get_unit_diet(int entity_id) const;
+    void set_unit_diet(int entity_id, int diet);
     Dictionary get_all_units() const;
 
     void clear_interaction_tables();

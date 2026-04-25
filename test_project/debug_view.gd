@@ -17,6 +17,7 @@ var spawn_team: int = 0 # 0=Ally, 1=Enemy
 var definitions = {}
 var effect_names = {}
 var biome_names = {}
+var wave_bit: int = 0
 
 @onready var ui_panel = $CanvasLayer/Control/Panel
 @onready var play_hud = %PlayHUD
@@ -26,6 +27,8 @@ var biome_names = {}
 @onready var impassable_check = $CanvasLayer/Control/Panel/VBoxContainer/ImpassableCheck
 @onready var effect_dropdown = $CanvasLayer/Control/Panel/VBoxContainer/EffectDropdown
 
+var mana_names = ["W (1)", "F (2)", "E (4)", "Pl (8)", "Pu (16)", "R (32)", "Mi (64)", "Ma (128)"]
+
 func _ready():
 	sim = SimulationManager.new()
 	add_child(sim)
@@ -34,6 +37,12 @@ func _ready():
 	sim.generate_new_world(42)
 	_refresh_map_list()
 	_update_mode_ui()
+	
+	for i in range(8):
+		%WaveBitSelector.add_item(mana_names[i], i)
+	%WaveBitSelector.item_selected.connect(func(idx): wave_bit = idx; queue_redraw())
+	%WaveToggle.toggled.connect(func(_p): queue_redraw())
+	
 	queue_redraw()
 
 func _update_mode_ui():
@@ -124,7 +133,12 @@ func _on_spawn_unit_pressed():
 	var team = 0 if %AllyRadio.button_pressed else 1
 	var flags = 0
 	if u_def.get("push", false): flags |= 1 << 1 # FLAG_PUSH
-	sim.spawn_unit_full(selected_tile.x, selected_tile.y, team, u_def.weight, u_def.velocity, flags)
+	if u_def.get("herbivore", false): flags |= 1 << 3 # FLAG_HERBIVORE
+	if u_def.get("carnivore", false): flags |= 1 << 4 # FLAG_CARNIVORE
+	
+	var id = sim.spawn_unit_full(selected_tile.x, selected_tile.y, team, u_def.weight, u_def.velocity, flags)
+	if id != -1:
+		sim.set_unit_diet(id, int(u_def.get("diet", 0)))
 	queue_redraw()
 
 func _get_effect_bit(n: String) -> int:
@@ -252,13 +266,36 @@ func _on_load_definitions_pressed(): effect_dropdown.clear(); biome_names.clear(
 func _draw():
 	if not sim: return
 	var width = sim.map_width; var height = sim.map_height
+	var grid_data = sim.get_grid_data()
+	
 	for z in range(height):
 		for x in range(width):
+			var idx = z * width + x
+			var tile_offset = idx * 16
 			var rect = Rect2(x * tile_size, z * tile_size, tile_size, tile_size)
-			if show_biome: draw_rect(rect, _get_biome_color(sim.get_tile_composition(x, z)))
-			else: draw_rect(rect, Color.DARK_GRAY, false)
-			if show_impassable and sim.is_impassable(x, z): draw_rect(rect.grow(-2), Color.BLACK, false, 2.0)
-			var effects = sim.get_tile_effects(x, z)
+			
+			if show_biome: 
+				var comp = grid_data[tile_offset]
+				draw_rect(rect, _get_biome_color(comp))
+			else: 
+				draw_rect(rect, Color.DARK_GRAY, false)
+				
+			if show_impassable:
+				var pathing = grid_data[tile_offset + 3]
+				if pathing & 0x20: # FLAG_IMPASSABLE
+					draw_rect(rect.grow(-2), Color.BLACK, false, 2.0)
+			
+			if %WaveToggle.button_pressed:
+				var imprint = grid_data.decode_u16(tile_offset + 13)
+				var state = (imprint >> (wave_bit * 2)) & 3
+				if state == 3: # SOURCE
+					draw_circle(rect.get_center(), tile_size * 0.4, Color.GOLD)
+				elif state == 2: # PULSE
+					draw_circle(rect.get_center(), tile_size * 0.3, Color.CYAN)
+				elif state == 1: # TRAIL
+					draw_circle(rect.get_center(), tile_size * 0.2, Color(0.2, 0.5, 1, 0.5))
+
+			var effects = grid_data.decode_u64(tile_offset + 4)
 			if effects != 0:
 				var center = rect.get_center(); var angle = 0.0; var count = 0
 				for i in range(16): if effects & (1 << i): count += 1
@@ -268,7 +305,8 @@ func _draw():
 						if count > 1: ball_pos += Vector2(cos(angle), sin(angle)) * 5.0; angle += (2.0 * PI) / count
 						draw_circle(ball_pos, 3, _get_mana_color(1 << i))
 			if show_scent:
-				var scent = sim.get_scent(x, z)
+				var pathing = grid_data[tile_offset + 3]
+				var scent = pathing & 0x0F
 				if scent > 0:
 					draw_rect(rect, Color(0.8, 0, 0.8, 0.2))
 					draw_string($CanvasLayer/Control.get_theme_default_font(), rect.position + Vector2(2, 14), str(scent), HORIZONTAL_ALIGNMENT_LEFT, -1, 10)

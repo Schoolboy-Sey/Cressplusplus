@@ -23,6 +23,8 @@ void SimulationManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("auto_update_scent"), &SimulationManager::auto_update_scent);
     ClassDB::bind_method(D_METHOD("set_tile_composition", "x", "z", "composition"), &SimulationManager::set_tile_composition);
     ClassDB::bind_method(D_METHOD("get_tile_composition", "x", "z"), &SimulationManager::get_tile_composition);
+    ClassDB::bind_method(D_METHOD("set_tile_mana", "x", "z", "mask"), &SimulationManager::set_tile_mana);
+    ClassDB::bind_method(D_METHOD("get_tile_mana", "x", "z"), &SimulationManager::get_tile_mana);
     ClassDB::bind_method(D_METHOD("set_tile_effect", "x", "z", "effect_bit"), &SimulationManager::set_tile_effect);
     ClassDB::bind_method(D_METHOD("get_tile_effects", "x", "z"), &SimulationManager::get_tile_effects);
     ClassDB::bind_method(D_METHOD("set_impassable", "x", "z", "impassable"), &SimulationManager::set_impassable);
@@ -39,6 +41,8 @@ void SimulationManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_unit_velocity", "entity_id"), &SimulationManager::get_unit_velocity);
     ClassDB::bind_method(D_METHOD("get_unit_flags", "entity_id"), &SimulationManager::get_unit_flags);
     ClassDB::bind_method(D_METHOD("set_unit_flags", "entity_id", "flags"), &SimulationManager::set_unit_flags);
+    ClassDB::bind_method(D_METHOD("get_unit_diet", "entity_id"), &SimulationManager::get_unit_diet);
+    ClassDB::bind_method(D_METHOD("set_unit_diet", "entity_id", "diet"), &SimulationManager::set_unit_diet);
     ClassDB::bind_method(D_METHOD("get_all_units"), &SimulationManager::get_all_units);
     ClassDB::bind_method(D_METHOD("get_scent", "x", "z"), &SimulationManager::get_scent);
     ClassDB::bind_method(D_METHOD("get_scent_map_string"), &SimulationManager::get_scent_map_string);
@@ -58,6 +62,8 @@ void SimulationManager::_bind_methods() {
     BIND_ENUM_CONSTANT(FLAG_BOUNCE);
     BIND_ENUM_CONSTANT(FLAG_PUSH);
     BIND_ENUM_CONSTANT(FLAG_FLYING);
+    BIND_ENUM_CONSTANT(FLAG_HERBIVORE);
+    BIND_ENUM_CONSTANT(FLAG_CARNIVORE);
 
     ADD_PROPERTY(PropertyInfo(Variant::INT, "map_width"), "", "get_map_width");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "map_height"), "", "get_map_height");
@@ -67,7 +73,8 @@ SimulationManager::SimulationManager() {
     int size = map_width * map_height; grid.resize(size); propagation_buffer.assign(size, 0); is_active_map.assign(size, false); is_dirty_map.assign(size, false);
     active_tiles.reserve(size / 10); dirty_propagation_indices.reserve(size / 10);
     entity_coordinate.resize(MAX_ENTITIES); entity_intent.resize(MAX_ENTITIES); entity_flags.assign(MAX_ENTITIES, 0);
-    entity_base_weight.resize(MAX_ENTITIES); entity_velocity.resize(MAX_ENTITIES); entity_team.resize(MAX_ENTITIES);
+    entity_base_weight.resize(MAX_ENTITIES); entity_diet.assign(MAX_ENTITIES, 0); entity_mutation.assign(MAX_ENTITIES, 0);
+    entity_velocity.resize(MAX_ENTITIES); entity_team.resize(MAX_ENTITIES);
     entity_generation.assign(MAX_ENTITIES, 0); entity_active.assign(MAX_ENTITIES, false); unit_grid.assign(size, -1);
     for (int i = MAX_ENTITIES - 1; i >= 0; --i) available_entities.push_back(i);
     clear_interaction_tables();
@@ -114,39 +121,205 @@ void SimulationManager::auto_update_scent() {
     }
 }
 
+int SimulationManager::get_unit_diet(int id) const { return (id >= 0 && id < MAX_ENTITIES && entity_active[id]) ? entity_diet[id] : 0; }
+void SimulationManager::set_unit_diet(int id, int diet) { if (id >= 0 && id < MAX_ENTITIES && entity_active[id]) entity_diet[id] = (uint8_t)diet; }
+
 void SimulationManager::process_ai_intents() {
     for (int i = 0; i < MAX_ENTITIES; ++i) {
         if (!entity_active[i] || entity_team[i] != 1) continue; 
-        int cur = entity_coordinate[i], cx = cur % map_width, cz = cur / map_width, best = cur, best_s = grid[cur].get_scent();
+        
+        int cur = entity_coordinate[i], cx = cur % map_width, cz = cur / map_width;
+        uint32_t flags = entity_flags[i];
+        uint8_t diet = entity_diet[i];
+        int best = cur;
+        bool found_target = false;
+
         int dx[] = {0,0,1,-1}, dz[] = {1,-1,0,0};
-        for (int d=0; d<4; ++d) {
-            int nx = cx+dx[d], nz = cz+dz[d];
-            if (nx>=0 && nx<map_width && nz>=0 && nz<map_height) {
-                int n_idx = nz*map_width+nx;
-                const Tile& neighbor = grid[n_idx];
-                int occupant = unit_grid[n_idx];
-                
-                if (!neighbor.is_impassable()) {
-                    // AI targets tile if empty OR contains a unit from an opposing team
-                    bool is_enemy = (occupant != -1 && entity_team[occupant] != entity_team[i]);
-                    if (occupant == -1 || is_enemy) {
-                        int n_scent = neighbor.get_scent();
+        
+        // --- HERBIVORE AI: RIDING THE WAVE ---
+        if (flags & FLAG_HERBIVORE) {
+            // Priority 1: Neighbor is Source (3)
+            for (int d = 0; d < 4; ++d) {
+                int nx = cx + dx[d], nz = cz + dz[d];
+                if (nx >= 0 && nx < map_width && nz >= 0 && nz < map_height) {
+                    int n_idx = nz * map_width + nx;
+                    uint16_t imprint = grid[n_idx].imprint_field;
+                    for (int b = 0; b < 8; ++b) {
+                        if ((diet & (1 << b)) && ((imprint >> (b * 2)) & 3) == 3) {
+                            best = n_idx; found_target = true; break;
+                        }
+                    }
+                }
+                if (found_target) break;
+            }
+
+            // Priority 2: Riding the Wave (Upstream toward Source)
+            if (!found_target) {
+                for (int d = 0; d < 4; ++d) {
+                    int nx = cx + dx[d], nz = cz + dz[d];
+                    if (nx >= 0 && nx < map_width && nz >= 0 && nz < map_height) {
+                        int n_idx = nz * map_width + nx;
+                        uint16_t imprint = grid[n_idx].imprint_field;
+                        uint16_t current_imprint = grid[cur].imprint_field;
+                        for (int b = 0; b < 8; ++b) {
+                            if (diet & (1 << b)) {
+                                int n_state = (imprint >> (b * 2)) & 3;
+                                int c_state = (current_imprint >> (b * 2)) & 3;
+                                // Emission: Pulse (10) to move toward Source
+                                if (n_state == 2 && (c_state == 1 || c_state == 0)) {
+                                    best = n_idx; found_target = true; break;
+                                }
+                            }
+                        }
+                    }
+                    if (found_target) break;
+                }
+            }
+        }
+        
+        // --- CARNIVORE AI: ENTITY HUNTING ---
+        else if (flags & FLAG_CARNIVORE) {
+            int best_s = -1;
+            for (int d = 0; d < 4; ++d) {
+                int nx = cx + dx[d], nz = cz + dz[d];
+                if (nx >= 0 && nx < map_width && nz >= 0 && nz < map_height) {
+                    int n_idx = nz * map_width + nx;
+                    int occupant = unit_grid[n_idx];
+                    // Target ANY unit not on our team (Carnivores hunt everything else)
+                    if (occupant != -1 && entity_team[occupant] != entity_team[i]) {
+                        best = n_idx; found_target = true; break;
+                    }
+                    // Fallback to legacy scent if no adjacent target
+                    int n_scent = grid[n_idx].get_scent();
+                    if (n_scent > best_s && !grid[n_idx].is_impassable() && unit_grid[n_idx] == -1) {
+                        best_s = n_scent; best = n_idx;
+                    }
+                }
+            }
+        }
+
+        // --- LEGACY AI FALLBACK ---
+        if (!found_target && !(flags & FLAG_CARNIVORE)) {
+            int best_s = grid[cur].get_scent();
+            for (int d = 0; d < 4; ++d) {
+                int nx = cx + dx[d], nz = cz + dz[d];
+                if (nx >= 0 && nx < map_width && nz >= 0 && nz < map_height) {
+                    int n_idx = nz * map_width + nx;
+                    if (!grid[n_idx].is_impassable() && unit_grid[n_idx] == -1) {
+                        int n_scent = grid[n_idx].get_scent();
                         if (n_scent > best_s) { best_s = n_scent; best = n_idx; }
                     }
                 }
             }
         }
+        
         entity_intent[i] = best;
     }
 }
 
 void SimulationManager::run_step() {
-    step_count++; std::vector<int> current_active = active_tiles; active_tiles.clear(); std::fill(is_active_map.begin(), is_active_map.end(), false);
+    step_count++;
+    std::vector<int> current_active = active_tiles;
+    active_tiles.clear();
+    std::fill(is_active_map.begin(), is_active_map.end(), false);
+
+    // --- STEP 1: Double Buffer Injection (Replenishment) ---
+    if (step_count % 10 == 0) {
+        for (int i = 0; i < (int)grid.size(); ++i) grid[i].ambient_mana |= grid[i].composition;
+    }
+
+    // --- STEP 3: ECS & Kinetic Clashes ---
     _resolve_movement_and_clashes();
+
+    // --- STEP 4: Shadow Buffer CA (Scent Waves SIMD) ---
+    _process_imprint_waves_simd();
+
+    // --- STEP 5: Branchless ALU (Chemistry) ---
     for (int index : current_active) _resolve_internal_alu(grid[index]);
+
+    // --- STEP 7: World Mutation (Transitions) ---
     _process_propagation_sparse(current_active);
     for (int index : current_active) _resolve_transitions(grid[index]);
-    _inject_biome_effects(); _apply_propagation();
+    _apply_propagation();
+}
+
+void SimulationManager::_process_imprint_waves_simd() {
+    // 1. Populate Shadow Buffer from Grid (with 1-tile border)
+    memset(shadow_buffer, 0, sizeof(shadow_buffer));
+    for (int z = 0; z < map_height; ++z) {
+        for (int x = 0; x < map_width; ++x) {
+            int g_idx = z * map_width + x;
+            int s_idx = (z + 1) * SHADOW_WIDTH + (x + 1);
+            
+            // Inject Sources: (Composition | Ambient Mana) -> State 11 (Source)
+            uint8_t src_mask = grid[g_idx].composition | grid[g_idx].ambient_mana;
+            uint16_t src_bits = 0;
+            for (int b = 0; b < 8; ++b) { if (src_mask & (1 << b)) src_bits |= (3 << (b * 2)); }
+            
+            shadow_buffer[s_idx] = grid[g_idx].imprint_field | src_bits;
+        }
+    }
+
+    // 2. Process CA logic using AVX2 (16 tiles at once)
+    __m256i mask_h = _mm256_set1_epi16(0xAAAA);
+    __m256i mask_l = _mm256_set1_epi16(0x5555);
+
+    for (int z = 1; z <= map_height; ++z) {
+        for (int x_chunk = 0; x_chunk < 3; ++x_chunk) {
+            int i = z * SHADOW_WIDTH + (x_chunk * 16);
+            
+            // Center cell
+            __m256i cur = _mm256_load_si256((__m256i*)&shadow_buffer[i]);
+            
+            // Orthogonal Neighbors (Unaligned loads)
+            __m256i un = _mm256_loadu_si256((__m256i*)&shadow_buffer[i - SHADOW_WIDTH]);
+            __m256i dn = _mm256_loadu_si256((__m256i*)&shadow_buffer[i + SHADOW_WIDTH]);
+            __m256i ln = _mm256_loadu_si256((__m256i*)&shadow_buffer[i - 1]);
+            __m256i rn = _mm256_loadu_si256((__m256i*)&shadow_buffer[i + 1]);
+
+            // Filter for high bits (Pulse or Source state)
+            __m256i uh = _mm256_and_si256(un, mask_h);
+            __m256i dh = _mm256_and_si256(dn, mask_h);
+            __m256i lh = _mm256_and_si256(ln, mask_h);
+            __m256i rh = _mm256_and_si256(rn, mask_h);
+
+            // --- CALCULATE "EXACTLY ONE" NEIGHBOR IS EXCITED ---
+            __m256i any_h = _mm256_or_si256(_mm256_or_si256(uh, dh), _mm256_or_si256(lh, rh));
+            __m256i pair1_h = _mm256_or_si256(_mm256_and_si256(uh, dh), _mm256_and_si256(lh, rh));
+            __m256i pair2_h = _mm256_and_si256(_mm256_or_si256(uh, dh), _mm256_or_si256(lh, rh));
+            __m256i multi_h = _mm256_or_si256(pair1_h, pair2_h);
+            __m256i exactly1_h = _mm256_andnot_si256(multi_h, any_h);
+
+            // Current State Components
+            __m256i h = _mm256_and_si256(cur, mask_h);
+            __m256i l = _mm256_and_si256(cur, mask_l);
+            __m256i l_at_h = _mm256_slli_epi16(l, 1);
+
+            // Source persistent mask (H & L)
+            __m256i src_mask = _mm256_and_si256(h, l_at_h);
+
+            // Logic:
+            // next_h = (~(h | l_at_h) & exactly1_h) | src_mask
+            __m256i next_h = _mm256_andnot_si256(_mm256_or_si256(h, l_at_h), exactly1_h);
+            next_h = _mm256_or_si256(next_h, src_mask);
+
+            // next_l = (h & ~l_at_h) | (src_mask >> 1)
+            __m256i pulse = _mm256_andnot_si256(l_at_h, h);
+            __m256i next_l = _mm256_srli_epi16(pulse, 1);
+            next_l = _mm256_or_si256(next_l, _mm256_srli_epi16(src_mask, 1));
+
+            _mm256_store_si256((__m256i*)&result_buffer[i], _mm256_or_si256(next_h, next_l));
+        }
+    }
+
+    // 3. Write back to Grid
+    for (int z = 0; z < map_height; ++z) {
+        for (int x = 0; x < map_width; ++x) {
+            int g_idx = z * map_width + x;
+            int r_idx = (z + 1) * SHADOW_WIDTH + (x + 1);
+            grid[g_idx].imprint_field = result_buffer[r_idx];
+        }
+    }
 }
 
 void SimulationManager::_resolve_movement_and_clashes() {
@@ -177,16 +350,13 @@ void SimulationManager::_resolve_movement_and_clashes() {
                         entity_coordinate[i] = next_step; unit_grid[next_step] = i; grid[next_step].effect_stack |= Tile::FLAG_HAS_ENTITY;
                         _mark_tile_active(next_step); _mark_tile_active(cur);
                     } else if (entity_flags[i] & FLAG_PUSH) {
-                        // Push Logic: Defender moved in same direction as attack
                         int pdx = dx, pdz = dz;
                         int ptx = (next_step % map_width) + pdx, ptz = (next_step / map_width) + pdz;
                         if (ptx >= 0 && ptx < map_width && ptz >= 0 && ptz < map_height) {
                             uint32_t p_idx = ptz * map_width + ptx;
                             int b_w = (int)biome_weights[grid[p_idx].composition];
                             if (grid[p_idx].is_impassable()) b_w = 255;
-
                             if (a_f + b_w > d_f) {
-                                // Impact Kill: Smashed into heavy biome or obstacle
                                 _despawn_entity_internal(occ);
                                 unit_grid[cur] = -1; grid[cur].effect_stack &= ~Tile::FLAG_HAS_ENTITY;
                                 entity_coordinate[i] = next_step; unit_grid[next_step] = i;
@@ -284,7 +454,7 @@ void SimulationManager::_inject_biome_effects() {}
 void SimulationManager::_process_propagation_sparse(const std::vector<int>& active_indices) {
     for (int idx : active_indices) {
         uint64_t st = grid[idx].effect_stack; if (st == 0) continue;
-        int x = idx % map_width, z = idx / map_width; uint8_t el = grid[idx].elevation, cd = grid[idx].get_countdown(); uint64_t it = st;
+        int x = idx % map_width, z = idx / map_width; uint8_t el = grid[idx].absolute_elevation, cd = grid[idx].get_countdown(); uint64_t it = st;
         while (it != 0) {
             int b_i = ctz64(it); uint64_t b_m = 1ULL << b_i; if (b_i >= 56) { it &= ~b_m; continue; }
             const PropagationRule &r = propagation_rules[b_i];
@@ -297,7 +467,7 @@ void SimulationManager::_process_propagation_sparse(const std::vector<int>& acti
                         if (nx>=0 && nx<map_width && nz>=0 && nz<map_height) {
                             int n_i = nz*map_width+nx;
                             uint8_t res_f = (flammability_lut[grid[n_i].composition] & f_m) | ~f_m;
-                            uint8_t res_e = ((grid[n_i].elevation <= el ? 0xFF : 0x00) & e_m) | ~e_m;
+                            uint8_t res_e = ((grid[n_i].absolute_elevation <= el ? 0xFF : 0x00) & e_m) | ~e_m;
                             if ((res_f & res_e) != 0) _push_to_buffer(n_i, b_m);
                         }
                     };
@@ -329,7 +499,7 @@ String SimulationManager::get_scent_map_string() const {
     String res = ""; for (int z=0; z<map_height; ++z) { for (int x=0; x<map_width; ++x) { if (is_impassable(x,z)) res+=" # "; else { int s = get_scent(x,z); if (s==0) res+=" . "; else { char buf[4]; snprintf(buf,sizeof(buf),"%2d ",s); res+=buf; } } } res+="\n"; } return res;
 }
 void SimulationManager::generate_new_world(int seed) {
-    grid.assign(map_width * map_height, Tile{0, 0, 0, 0, 0, 0, {0, 0, 0}});
+    grid.assign(map_width * map_height, Tile{0, 0, 0, 0, 0, 0, 0, 0});
     for (auto &tile : grid) tile.set_countdown(7);
     active_tiles.clear(); is_active_map.assign(map_width * map_height, false);
     dirty_propagation_indices.clear(); is_dirty_map.assign(map_width * map_height, false);
@@ -344,6 +514,8 @@ void SimulationManager::clear_interaction_tables() {
 }
 void SimulationManager::set_tile_composition(int x, int z, int c) { if (x >= 0 && x < map_width && z >= 0 && z < map_height) grid[z * map_width + x].composition = (uint8_t)c; }
 int SimulationManager::get_tile_composition(int x, int z) const { return (x >= 0 && x < map_width && z >= 0 && z < map_height) ? (int)grid[z * map_width + x].composition : 0; }
+void SimulationManager::set_tile_mana(int x, int z, int m) { if (x >= 0 && x < map_width && z >= 0 && z < map_height) grid[z * map_width + x].ambient_mana = (uint8_t)m; }
+int SimulationManager::get_tile_mana(int x, int z) const { return (x >= 0 && x < map_width && z >= 0 && z < map_height) ? (int)grid[z * map_width + x].ambient_mana : 0; }
 void SimulationManager::set_tile_effect(int x, int z, uint64_t e) { if (x >= 0 && x < map_width && z >= 0 && z < map_height) { int idx = z * map_width + x; grid[idx].effect_stack |= e; if (e & 0x00FFFFFFFFFFFFFFULL) grid[idx].set_countdown(7); _mark_tile_active(idx); } }
 uint64_t SimulationManager::get_tile_effects(int x, int z) const { return (x >= 0 && x < map_width && z >= 0 && z < map_height) ? grid[z * map_width + x].effect_stack : (uint64_t)0; }
 void SimulationManager::set_impassable(int x, int z, bool i) { if (x >= 0 && x < map_width && z >= 0 && z < map_height) { int idx = z * map_width + x; if (i) grid[idx].pathing_scent |= Tile::FLAG_HAZARD | Tile::FLAG_IMPASSABLE; else grid[idx].pathing_scent &= ~(Tile::FLAG_HAZARD | Tile::FLAG_IMPASSABLE); } }
