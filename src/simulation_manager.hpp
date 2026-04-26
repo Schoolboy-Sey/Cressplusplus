@@ -121,6 +121,8 @@ public:
     void load_state_snapshot();
     void process_ai_intents();
     void auto_update_scent();
+    void run_scent_update(int x, int z);
+    void update_scent(int x, int z);
 
     void set_tile_composition(int x, int z, int composition);
     int get_tile_composition(int x, int z) const;

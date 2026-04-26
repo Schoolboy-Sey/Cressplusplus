@@ -30,6 +30,7 @@ void SimulationManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("load_state_snapshot"), &SimulationManager::load_state_snapshot);
     ClassDB::bind_method(D_METHOD("process_ai_intents"), &SimulationManager::process_ai_intents);
     ClassDB::bind_method(D_METHOD("auto_update_scent"), &SimulationManager::auto_update_scent);
+    ClassDB::bind_method(D_METHOD("run_scent_update", "x", "z"), &SimulationManager::run_scent_update);
     ClassDB::bind_method(D_METHOD("set_tile_composition", "x", "z", "composition"), &SimulationManager::set_tile_composition);
     ClassDB::bind_method(D_METHOD("get_tile_composition", "x", "z"), &SimulationManager::get_tile_composition);
     ClassDB::bind_method(D_METHOD("set_tile_mana", "x", "z", "mask"), &SimulationManager::set_tile_mana);
@@ -158,15 +159,25 @@ void SimulationManager::process_ai_intents() {
         if (entity_sated_timer[i] > 0) { entity_intent[i] = cur; continue; }
 
         uint32_t flags = entity_flags[i];
+        uint8_t diet = entity_diet[i];
         uint16_t dm = entity_diet_mask[i];
+
+        // --- STAY IF ON FOOD ---
+        uint8_t food_here = grid[cur].ambient_mana | grid[cur].composition;
+        if (food_here & diet) { entity_intent[i] = cur; continue; }
+
         uint16_t imprint = grid[cur].imprint_field & dm;
         int best = cur;
         bool found_wave = false;
 
         // --- O(1) PHASE ALIGNMENT NAVIGATION ---
         uint16_t target_state = 0;
-        if (imprint == (dm & 0xAAAA)) target_state = dm & 0x5555; // Standing on Pulse, look for Trail
-        else if (imprint == 0) target_state = dm & 0xAAAA;         // Standing on Empty, look for Pulse
+        uint16_t pulse_mask = dm & 0xAAAA;
+        uint16_t trail_mask = dm & 0x5555;
+
+        if (imprint & pulse_mask) target_state = trail_mask;      // On Pulse -> look for Trail
+        else if (imprint & trail_mask) target_state = 0;           // On Trail -> look for Empty
+        else target_state = pulse_mask;                            // On Empty -> look for Pulse
 
         int cx = cur % map_width, cz = cur / map_width;
         int dx[] = {0,0,1,-1}, dz[] = {1,-1,0,0};
@@ -174,7 +185,17 @@ void SimulationManager::process_ai_intents() {
             int nx = cx + dx[d], nz = cz + dz[d];
             if (nx >= 0 && nx < map_width && nz >= 0 && nz < map_height) {
                 int n_idx = nz * map_width + nx;
-                if ((grid[n_idx].imprint_field & dm) == target_state) { best = n_idx; found_wave = true; break; }
+                uint16_t n_imprint = grid[n_idx].imprint_field & dm;
+                
+                // Prioritize Source neighbor (Source has both bits set for at least one diet type)
+                if ((n_imprint & pulse_mask) && (n_imprint & trail_mask)) {
+                    best = n_idx; found_wave = true; break;
+                }
+                
+                if (n_imprint == target_state) { 
+                    best = n_idx; found_wave = true; 
+                    // Don't break yet, keep looking for a Source if possible
+                }
             }
         }
 
@@ -206,6 +227,33 @@ void SimulationManager::process_ai_intents() {
             }
         }
         entity_intent[i] = best;
+    }
+}
+
+void SimulationManager::run_scent_update(int x, int z) { update_scent(x, z); }
+void SimulationManager::update_scent(int x, int z) {
+    for (auto &tile : grid) tile.set_scent(0);
+    if (x < 0 || x >= map_width || z < 0 || z >= map_height) return;
+    wavefront_current.clear();
+    int idx = z * map_width + x; grid[idx].set_scent(15); wavefront_current.push_back(idx);
+    int current_scent = 15;
+    while (!wavefront_current.empty() && current_scent > 0) {
+        wavefront_next.clear();
+        for (int c_idx : wavefront_current) {
+            int tx = c_idx % map_width, tz = c_idx / map_width;
+            int dx[] = {0,0,1,-1}, dz[] = {1,-1,0,0};
+            for (int d=0; d<4; ++d) {
+                int nx = tx+dx[d], nz = tz+dz[d];
+                if (nx>=0 && nx<map_width && nz>=0 && nz<map_height) {
+                    int n_idx = nz*map_width+nx; Tile &n = grid[n_idx];
+                    if (!n.is_impassable() && n.get_scent() < current_scent-1) {
+                        n.set_scent(current_scent-1); wavefront_next.push_back(n_idx);
+                    }
+                }
+            }
+        }
+        wavefront_current = wavefront_next;
+        current_scent--;
     }
 }
 

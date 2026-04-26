@@ -234,22 +234,67 @@ func _on_save_map_as_pressed():
 	var map_name = %MapNameInput.text
 	if map_name == "": return
 	if not map_name.ends_with(".json"): map_name += ".json"
-	var data = {"width": sim.map_width, "height": sim.map_height, "player": {"x": 0, "y": 0}, "tiles": []}
+	
+	var data = {
+		"width": sim.map_width, 
+		"height": sim.map_height, 
+		"tiles": [],
+		"units": []
+	}
+	
 	for z in range(sim.map_height):
 		for x in range(sim.map_width):
-			var tile = {"x": x, "z": z, "comp": sim.get_tile_composition(x, z), "imp": sim.is_impassable(x, z), "eff": sim.get_tile_effects(x, z)}
-			if tile.comp != 0 or tile.imp or tile.eff != 0: data.tiles.append(tile)
-	var file = FileAccess.open("user://maps/" + map_name, FileAccess.WRITE); file.store_string(JSON.stringify(data)); _refresh_map_list()
+			var tile = {
+				"x": x, "z": z, 
+				"comp": sim.get_tile_composition(x, z), 
+				"imp": sim.is_impassable(x, z), 
+				"eff": sim.get_tile_effects(x, z)
+			}
+			if tile.comp != 0 or tile.imp or tile.eff != 0: 
+				data.tiles.append(tile)
+	
+	var all_units = sim.get_all_units()
+	for id in all_units:
+		var pos = all_units[id]
+		var u_data = {
+			"x": pos.x,
+			"z": pos.y,
+			"team": sim.get_unit_team(id),
+			"weight": sim.get_unit_weight(id),
+			"velocity": sim.get_unit_velocity(id),
+			"flags": sim.get_unit_flags(id),
+			"diet": sim.get_unit_diet(id)
+		}
+		data.units.append(u_data)
+		
+	var file = FileAccess.open("user://maps/" + map_name, FileAccess.WRITE)
+	file.store_string(JSON.stringify(data))
+	_refresh_map_list()
 
 func _on_load_map_pressed():
 	var idx = %MapDropdown.selected
 	if idx == -1: return
-	var map_name = %MapDropdown.get_item_text(idx); %MapNameInput.text = map_name.replace(".json", "")
+	var map_name = %MapDropdown.get_item_text(idx)
+	%MapNameInput.text = map_name.replace(".json", "")
 	var file = FileAccess.open("user://maps/" + map_name, FileAccess.READ)
 	if not file: return
-	var data = JSON.parse_string(file.get_as_text()); sim.generate_new_world(0)
-	for t in data.tiles: sim.set_tile_composition(t.x, t.z, t.comp); sim.set_impassable(t.x, t.z, t.imp); sim.set_tile_effect(t.x, t.z, int(t.eff))
-	sim.auto_update_scent(); queue_redraw()
+	
+	var data = JSON.parse_string(file.get_as_text())
+	sim.generate_new_world(0)
+	
+	for t in data.tiles: 
+		sim.set_tile_composition(t.x, t.z, int(t.comp))
+		sim.set_impassable(t.x, t.z, bool(t.imp))
+		sim.set_tile_effect(t.x, t.z, int(t.eff))
+	
+	if data.has("units"):
+		for u in data.units:
+			var id = sim.spawn_unit_full(int(u.x), int(u.z), int(u.team), int(u.weight), int(u.velocity), int(u.flags))
+			if id != -1:
+				sim.set_unit_diet(id, int(u.get("diet", 0)))
+	
+	sim.auto_update_scent()
+	queue_redraw()
 
 func _on_toggle_scent_toggled(button_pressed): show_scent = button_pressed; queue_redraw()
 func _on_toggle_biome_toggled(button_pressed): show_biome = button_pressed; queue_redraw()
