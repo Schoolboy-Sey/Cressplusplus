@@ -30,11 +30,14 @@ void SimulationManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("load_state_snapshot"), &SimulationManager::load_state_snapshot);
     ClassDB::bind_method(D_METHOD("process_ai_intents"), &SimulationManager::process_ai_intents);
     ClassDB::bind_method(D_METHOD("auto_update_scent"), &SimulationManager::auto_update_scent);
+    ClassDB::bind_method(D_METHOD("apply_scent_vacuum"), &SimulationManager::apply_scent_vacuum);
+    ClassDB::bind_method(D_METHOD("clear_imprint_field"), &SimulationManager::clear_imprint_field);
     ClassDB::bind_method(D_METHOD("run_scent_update", "x", "z"), &SimulationManager::run_scent_update);
     ClassDB::bind_method(D_METHOD("set_tile_composition", "x", "z", "composition"), &SimulationManager::set_tile_composition);
     ClassDB::bind_method(D_METHOD("get_tile_composition", "x", "z"), &SimulationManager::get_tile_composition);
     ClassDB::bind_method(D_METHOD("set_tile_mana", "x", "z", "mask"), &SimulationManager::set_tile_mana);
     ClassDB::bind_method(D_METHOD("get_tile_mana", "x", "z"), &SimulationManager::get_tile_mana);
+    ClassDB::bind_method(D_METHOD("get_tile_regrowth", "x", "z"), &SimulationManager::get_tile_regrowth);
     ClassDB::bind_method(D_METHOD("set_tile_effect", "x", "z", "effect_bit"), &SimulationManager::set_tile_effect);
     ClassDB::bind_method(D_METHOD("get_tile_effects", "x", "z"), &SimulationManager::get_tile_effects);
     ClassDB::bind_method(D_METHOD("set_impassable", "x", "z", "impassable"), &SimulationManager::set_impassable);
@@ -53,6 +56,8 @@ void SimulationManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_unit_flags", "entity_id", "flags"), &SimulationManager::set_unit_flags);
     ClassDB::bind_method(D_METHOD("get_unit_diet", "entity_id"), &SimulationManager::get_unit_diet);
     ClassDB::bind_method(D_METHOD("set_unit_diet", "entity_id", "diet"), &SimulationManager::set_unit_diet);
+    ClassDB::bind_method(D_METHOD("get_unit_species", "entity_id"), &SimulationManager::get_unit_species);
+    ClassDB::bind_method(D_METHOD("set_unit_species", "entity_id", "species"), &SimulationManager::set_unit_species);
     ClassDB::bind_method(D_METHOD("get_unit_sated_timer", "entity_id"), &SimulationManager::get_unit_sated_timer);
     ClassDB::bind_method(D_METHOD("get_all_units"), &SimulationManager::get_all_units);
     ClassDB::bind_method(D_METHOD("get_scent", "x", "z"), &SimulationManager::get_scent);
@@ -69,6 +74,7 @@ void SimulationManager::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_propagation_interval", "bit_index", "interval"), &SimulationManager::set_propagation_interval);
     ClassDB::bind_method(D_METHOD("add_evolution_path", "current_species", "mana_bit", "result_species"), &SimulationManager::add_evolution_path);
     ClassDB::bind_method(D_METHOD("set_species_stats", "species_id", "weight", "velocity"), &SimulationManager::set_species_stats);
+    ClassDB::bind_method(D_METHOD("set_species_sated_duration", "species_id", "duration"), &SimulationManager::set_species_sated_duration);
     ClassDB::bind_method(D_METHOD("get_map_width"), &SimulationManager::get_map_width);
     ClassDB::bind_method(D_METHOD("get_map_height"), &SimulationManager::get_map_height);
 
@@ -90,14 +96,26 @@ SimulationManager::SimulationManager() {
     entity_coordinate.resize(MAX_ENTITIES); entity_intent.resize(MAX_ENTITIES); entity_flags.assign(MAX_ENTITIES, 0);
     entity_diet_mask.assign(MAX_ENTITIES, 0); entity_base_weight.resize(MAX_ENTITIES); entity_species.assign(MAX_ENTITIES, 0);
     entity_diet.assign(MAX_ENTITIES, 0); entity_mutation.assign(MAX_ENTITIES, 0);
-    entity_tier.assign(MAX_ENTITIES, 0); entity_heading.assign(MAX_ENTITIES, 0); entity_sated_timer.assign(MAX_ENTITIES, 0);
+    entity_tier.assign(MAX_ENTITIES, 0); entity_heading.assign(MAX_ENTITIES, 4); entity_sated_timer.assign(MAX_ENTITIES, 0);
     entity_velocity.resize(MAX_ENTITIES); entity_team.resize(MAX_ENTITIES);
     entity_active.assign(MAX_ENTITIES, 0); unit_grid.assign(size, EMPTY_TILE);
     for (int i = MAX_ENTITIES - 1; i >= 0; --i) available_entities.push_back(i);
-    memset(evolution_paths, 0, sizeof(evolution_paths)); memset(species_base_weight, 0, sizeof(species_base_weight)); memset(species_base_velocity, 0, sizeof(species_base_velocity));
+    memset(evolution_paths, 0, sizeof(evolution_paths)); 
+    memset(species_base_weight, 0, sizeof(species_base_weight)); 
+    memset(species_base_velocity, 0, sizeof(species_base_velocity));
+    memset(species_sated_duration, 10, sizeof(species_sated_duration)); 
     clear_interaction_tables();
 }
 SimulationManager::~SimulationManager() {}
+
+void SimulationManager::set_species_sated_duration(int species_id, int duration) {
+    if (species_id >= 0 && species_id < 256) {
+        // duration is in Turns, internal timer is in Steps (1 Turn = 10 Steps)
+        int steps = duration * 10;
+        if (steps > 255) steps = 255; 
+        species_sated_duration[species_id] = (uint8_t)steps;
+    }
+}
 
 void SimulationManager::save_state_snapshot() {
     snapshot_grid = grid; snapshot_entity_coordinate = entity_coordinate; snapshot_entity_intent = entity_intent; 
@@ -116,6 +134,29 @@ void SimulationManager::load_state_snapshot() {
         if (!entity_active[i]) available_entities.push_back(i);
         else active_entity_indices.push_back((uint16_t)i);
     }
+}
+
+void SimulationManager::apply_scent_vacuum() {
+    for (uint16_t i : active_entity_indices) {
+        if (!entity_active[i]) continue;
+        int cur = entity_coordinate[i];
+        uint16_t dm = entity_diet_mask[i];
+        if (dm == 0) continue;
+
+        int cx = cur % map_width, cz = cur / map_width;
+        for (int dz = -1; dz <= 1; ++dz) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                int nx = cx + dx, nz = cz + dz;
+                if (nx >= 0 && nx < map_width && nz >= 0 && nz < map_height) {
+                    grid[nz * map_width + nx].imprint_field &= ~dm;
+                }
+            }
+        }
+    }
+}
+
+void SimulationManager::clear_imprint_field() {
+    for (auto &tile : grid) tile.imprint_field = 0;
 }
 
 void SimulationManager::auto_update_scent() {
@@ -143,90 +184,79 @@ void SimulationManager::auto_update_scent() {
 }
 
 int SimulationManager::get_unit_diet(int id) const { return (id >= 0 && id < MAX_ENTITIES && entity_active[id]) ? entity_diet[id] : 0; }
-void SimulationManager::set_unit_diet(int id, int diet) { 
+void SimulationManager::set_unit_diet(int id, int diet) {
     if (id >= 0 && id < MAX_ENTITIES && entity_active[id]) {
         entity_diet[id] = (uint8_t)diet;
         uint16_t mask = 0; for(int b=0; b<8; ++b) { if(diet & (1<<b)) mask |= (3 << (b*2)); }
         entity_diet_mask[id] = mask;
     }
 }
+void SimulationManager::set_unit_species(int id, int species) { if (id >= 0 && id < MAX_ENTITIES && entity_active[id]) entity_species[id] = (uint8_t)species; }
+int SimulationManager::get_unit_species(int id) const { return (id >= 0 && id < MAX_ENTITIES && entity_active[id]) ? (int)entity_species[id] : 0; }
 int SimulationManager::get_unit_sated_timer(int id) const { return (id >= 0 && id < MAX_ENTITIES && entity_active[id]) ? (int)entity_sated_timer[id] : 0; }
-
 void SimulationManager::process_ai_intents() {
     for (uint16_t i : active_entity_indices) {
         if (entity_team[i] != 1) continue; 
         int cur = entity_coordinate[i];
-        if (entity_sated_timer[i] > 0) { entity_intent[i] = cur; continue; }
-
-        uint32_t flags = entity_flags[i];
-        uint8_t diet = entity_diet[i];
+        
         uint16_t dm = entity_diet_mask[i];
-
-        // --- STAY IF ON FOOD ---
-        uint8_t food_here = grid[cur].ambient_mana | grid[cur].composition;
-        if (food_here & diet) { entity_intent[i] = cur; continue; }
-
-        uint16_t imprint = grid[cur].imprint_field & dm;
-        int best = cur;
-        bool found_wave = false;
-
-        // --- O(1) PHASE ALIGNMENT NAVIGATION ---
-        uint16_t target_state = 0;
+        bool is_sated = entity_sated_timer[i] > 0;
         uint16_t pulse_mask = dm & 0xAAAA;
         uint16_t trail_mask = dm & 0x5555;
 
-        if (imprint & pulse_mask) target_state = trail_mask;      // On Pulse -> look for Trail
-        else if (imprint & trail_mask) target_state = 0;           // On Trail -> look for Empty
-        else target_state = pulse_mask;                            // On Empty -> look for Pulse
+        auto calculate_score = [&](int idx) -> int {
+            if (grid[idx].is_impassable()) return -100;
+            if (idx != cur && unit_grid[idx] != EMPTY_TILE) return -50;
+            
+            uint16_t imp = grid[idx].imprint_field & dm;
+            if (is_sated) {
+                // Sated: Avoid Sources and Pulses, prefer Trail or Empty
+                if ((imp & pulse_mask) && (imp & trail_mask)) return 0; // Source
+                if (imp & pulse_mask) return 2;                        // Pulse
+                if (imp & trail_mask) return 10;                       // Trail (Surfing away)
+                if (imp == 0) return 8;                                // Empty
+                return 5;
+            } else {
+                // Hungry: Prefer Sources and Pulses
+                if ((imp & pulse_mask) && (imp & trail_mask)) return 20; // Source
+                if (imp & pulse_mask) return 15;                       // Pulse
+                if (imp & trail_mask) return 2;                        // Trail
+                if (imp == 0) return 1;                                // Empty
+                return 0;
+            }
+        };
+
+        int best_idx = cur;
+        int best_score = calculate_score(cur);
+        int chosen_d = -1;
 
         int cx = cur % map_width, cz = cur / map_width;
         int dx[] = {0,0,1,-1}, dz[] = {1,-1,0,0};
-        for (int d = 0; d < 4; ++d) {
+
+        // Randomized tie-breaking search start
+        int start_d = (i + step_count) % 4;
+
+        for (int j = 0; j < 4; ++j) {
+            int d = (start_d + j) % 4;
             int nx = cx + dx[d], nz = cz + dz[d];
             if (nx >= 0 && nx < map_width && nz >= 0 && nz < map_height) {
                 int n_idx = nz * map_width + nx;
-                uint16_t n_imprint = grid[n_idx].imprint_field & dm;
+                int base_score = calculate_score(n_idx);
+                int score = base_score;
                 
-                // Prioritize Source neighbor (Source has both bits set for at least one diet type)
-                if ((n_imprint & pulse_mask) && (n_imprint & trail_mask)) {
-                    best = n_idx; found_wave = true; break;
-                }
-                
-                if (n_imprint == target_state) { 
-                    best = n_idx; found_wave = true; 
-                    // Don't break yet, keep looking for a Source if possible
+                // Only give inertia bonus if we are actually following a scent (>1)
+                if (d == entity_heading[i] && base_score > 1) score += 2;
+
+                if (score > best_score) {
+                    best_score = score;
+                    best_idx = n_idx;
+                    chosen_d = d;
                 }
             }
         }
 
-        if (!found_wave) {
-            if (flags & FLAG_CARNIVORE) {
-                int best_s = -1;
-                for (int d = 0; d < 4; ++d) {
-                    int nx = cx + dx[d], nz = cz + dz[d];
-                    if (nx >= 0 && nx < map_width && nz >= 0 && nz < map_height) {
-                        int n_idx = nz * map_width + nx;
-                        int occupant = get_unit_at(nx, nz);
-                        if (occupant != -1 && entity_team[occupant] != entity_team[i]) { best = n_idx; break; }
-                        int n_scent = grid[n_idx].get_scent();
-                        if (n_scent > best_s && !grid[n_idx].is_impassable() && unit_grid[n_idx] == EMPTY_TILE) { best_s = n_scent; best = n_idx; }
-                    }
-                }
-            } else {
-                int best_s = grid[cur].get_scent();
-                for (int d = 0; d < 4; ++d) {
-                    int nx = cx + dx[d], nz = cz + dz[d];
-                    if (nx >= 0 && nx < map_width && nz >= 0 && nz < map_height) {
-                        int n_idx = nz * map_width + nx;
-                        if (!grid[n_idx].is_impassable() && unit_grid[n_idx] == EMPTY_TILE) {
-                            int n_scent = grid[n_idx].get_scent();
-                            if (n_scent > best_s) { best_s = n_scent; best = n_idx; }
-                        }
-                    }
-                }
-            }
-        }
-        entity_intent[i] = best;
+        if (chosen_d != -1) entity_heading[i] = (uint8_t)chosen_d;
+        entity_intent[i] = best_idx;
     }
 }
 
@@ -262,9 +292,6 @@ void SimulationManager::run_step() {
     std::vector<int> current_active = active_tiles;
     active_tiles.clear(); std::fill(is_active_map.begin(), is_active_map.end(), 0);
 
-    // --- STEP 1: Double Buffer Injection ---
-    if (step_count % 10 == 0) for (int i = 0; i < (int)grid.size(); ++i) grid[i].ambient_mana |= grid[i].composition;
-
     // --- STEP 3: ECS & Kinetic Clashes ---
     _resolve_movement_and_clashes();
 
@@ -276,35 +303,46 @@ void SimulationManager::run_step() {
 
     // --- STEP 6: Biological Reaction & Evolution ---
     for (uint16_t i : active_entity_indices) {
-        if (entity_sated_timer[i] > 0) { entity_sated_timer[i]--; continue; }
-        int cur = entity_coordinate[i]; uint8_t diet = entity_diet[i];
+        int cur = entity_coordinate[i]; 
+        uint8_t diet = entity_diet[i];
+        uint16_t dm = entity_diet_mask[i];
         if (diet == 0) continue;
-        
-        uint8_t food_source = grid[cur].ambient_mana | grid[cur].composition;
-        if (food_source & diet) {
-            int m_idx = ctz64(food_source & diet);
-            if (grid[cur].ambient_mana & (1 << m_idx)) grid[cur].ambient_mana &= ~(1 << m_idx);
-            else { grid[cur].composition &= ~(1 << m_idx); _mark_tile_active(cur); }
-            
-            entity_sated_timer[i] = 10;
-            uint8_t curr_spec = entity_species[i];
-            uint8_t next_spec = evolution_paths[curr_spec][m_idx];
 
-            // Branchless Mutation/Evolution
+        // Skip eating if sated
+        if (entity_sated_timer[i] > 0) {
+            entity_sated_timer[i]--;
+            continue;
+        }
+        
+        uint8_t ambient = grid[cur].ambient_mana & diet;
+        uint8_t comp = grid[cur].composition & diet;
+        uint8_t food_source = ambient ? ambient : comp;
+
+        if (food_source) {
+            int m_idx = ctz64(food_source);
+            if (grid[cur].ambient_mana & (1 << m_idx)) {
+                grid[cur].ambient_mana &= ~(1 << m_idx);
+            } else {
+                grid[cur].composition &= ~(1 << m_idx);
+                _mark_tile_active(cur);
+            }
+            
+            uint8_t curr_spec = entity_species[i];
+            entity_sated_timer[i] = species_sated_duration[curr_spec];
+            
+            uint8_t next_spec = evolution_paths[curr_spec][m_idx];
+            
+            // --- EVOLUTION LOGIC ---
             uint8_t evo_mask = -static_cast<uint8_t>(next_spec != 0);
             uint8_t mut_mask = ~evo_mask;
-
             entity_species[i] = (next_spec & evo_mask) | (curr_spec & mut_mask);
             uint8_t mut_stack = entity_mutation[i] | (1 << m_idx);
             entity_mutation[i] = mut_stack & mut_mask;
-
             uint8_t old_t = entity_tier[i], new_t = popcount8(entity_mutation[i]);
             entity_tier[i] = new_t;
-
             uint8_t t_diff = new_t - old_t;
             uint8_t ew = species_base_weight[next_spec], mw = entity_base_weight[i] + (20 * t_diff);
             int8_t  ev = species_base_velocity[next_spec], mv = entity_velocity[i] - t_diff;
-
             entity_base_weight[i] = (ew & evo_mask) | (mw & mut_mask);
             entity_velocity[i]    = (ev & evo_mask) | (mv & mut_mask);
         }
@@ -321,10 +359,20 @@ void SimulationManager::_process_imprint_waves_simd() {
     for (int z = 0; z < map_height; ++z) {
         for (int x = 0; x < map_width; ++x) {
             int g_idx = z * map_width + x, s_idx = (z + 1) * SHADOW_WIDTH + (x + 1);
-            uint8_t src_mask = grid[g_idx].composition | grid[g_idx].ambient_mana;
+            uint8_t src_mask = grid[g_idx].ambient_mana;
             uint16_t src_bits = 0;
             for (int b = 0; b < 8; ++b) if (src_mask & (1 << b)) src_bits |= (3 << (b * 2));
-            shadow_buffer[s_idx] = grid[g_idx].imprint_field | src_bits;
+            
+            uint16_t imp = grid[g_idx].imprint_field;
+            // Downgrade existing Sources to Pulse if mana is gone (prevent "ghost" sources)
+            for (int b = 0; b < 8; ++b) {
+                uint16_t bit_pair = (imp >> (b * 2)) & 3;
+                if (bit_pair == 3 && !(src_mask & (1 << b))) {
+                    imp &= ~(3 << (b * 2));
+                    imp |= (2 << (b * 2));
+                }
+            }
+            shadow_buffer[s_idx] = imp | src_bits;
         }
     }
     __m256i m_h = _mm256_set1_epi16(0xAAAA), m_l = _mm256_set1_epi16(0x5555);
@@ -332,32 +380,94 @@ void SimulationManager::_process_imprint_waves_simd() {
         for (int xc = 0; xc < 3; ++xc) {
             int i = z * SHADOW_WIDTH + (xc * 16);
             __m256i cur = _mm256_load_si256((__m256i*)&shadow_buffer[i]);
-            __m256i u = _mm256_loadu_si256((__m256i*)&shadow_buffer[i - SHADOW_WIDTH]);
-            __m256i d = _mm256_loadu_si256((__m256i*)&shadow_buffer[i + SHADOW_WIDTH]);
-            __m256i l = _mm256_loadu_si256((__m256i*)&shadow_buffer[i - 1]);
-            __m256i r = _mm256_loadu_si256((__m256i*)&shadow_buffer[i + 1]);
-            __m256i uh = _mm256_and_si256(u, m_h), dh = _mm256_and_si256(d, m_h), lh = _mm256_and_si256(l, m_h), rh = _mm256_and_si256(r, m_h);
-            __m256i any_h = _mm256_or_si256(_mm256_or_si256(uh, dh), _mm256_or_si256(lh, rh));
-            __m256i p1 = _mm256_or_si256(_mm256_and_si256(uh, dh), _mm256_and_si256(lh, rh));
-            __m256i p2 = _mm256_and_si256(_mm256_or_si256(uh, dh), _mm256_or_si256(lh, rh));
-            __m256i multi = _mm256_or_si256(p1, p2), ex1 = _mm256_andnot_si256(multi, any_h);
+            
+            // --- 8-WAY NEIGHBOR LOADS ---
+            __m256i u  = _mm256_loadu_si256((__m256i*)&shadow_buffer[i - SHADOW_WIDTH]);
+            __m256i d  = _mm256_loadu_si256((__m256i*)&shadow_buffer[i + SHADOW_WIDTH]);
+            __m256i l  = _mm256_loadu_si256((__m256i*)&shadow_buffer[i - 1]);
+            __m256i r  = _mm256_loadu_si256((__m256i*)&shadow_buffer[i + 1]);
+            __m256i ul = _mm256_loadu_si256((__m256i*)&shadow_buffer[i - SHADOW_WIDTH - 1]);
+            __m256i ur = _mm256_loadu_si256((__m256i*)&shadow_buffer[i - SHADOW_WIDTH + 1]);
+            __m256i dl = _mm256_loadu_si256((__m256i*)&shadow_buffer[i + SHADOW_WIDTH - 1]);
+            __m256i dr = _mm256_loadu_si256((__m256i*)&shadow_buffer[i + SHADOW_WIDTH + 1]);
+
+            // Filter for Pulse/Source (High bits)
+            __m256i uh = _mm256_and_si256(u, m_h),  dh = _mm256_and_si256(d, m_h);
+            __m256i lh = _mm256_and_si256(l, m_h),  rh = _mm256_and_si256(r, m_h);
+            __m256i ulh = _mm256_and_si256(ul, m_h), urh = _mm256_and_si256(ur, m_h);
+            __m256i dlh = _mm256_and_si256(dl, m_h), drh = _mm256_and_si256(dr, m_h);
+
+            // Group 1: Orthogonal
+            __m256i any1 = _mm256_or_si256(_mm256_or_si256(uh, dh), _mm256_or_si256(lh, rh));
+            __m256i p1_1 = _mm256_or_si256(_mm256_and_si256(uh, dh), _mm256_and_si256(lh, rh));
+            __m256i p2_1 = _mm256_and_si256(_mm256_or_si256(uh, dh), _mm256_or_si256(lh, rh));
+            __m256i multi1 = _mm256_or_si256(p1_1, p2_1);
+
+            // Group 2: Diagonal
+            __m256i any2 = _mm256_or_si256(_mm256_or_si256(ulh, urh), _mm256_or_si256(dlh, drh));
+            __m256i p1_2 = _mm256_or_si256(_mm256_and_si256(ulh, urh), _mm256_and_si256(dlh, drh));
+            __m256i p2_2 = _mm256_and_si256(_mm256_or_si256(ulh, urh), _mm256_or_si256(dlh, drh));
+            __m256i multi2 = _mm256_or_si256(p1_2, p2_2);
+
+            // Combine for "Exactly One" across all 8 neighbors
+            __m256i any_h = _mm256_or_si256(any1, any2);
+            __m256i multi = _mm256_or_si256(_mm256_or_si256(multi1, multi2), _mm256_and_si256(any1, any2));
+            __m256i ex1 = _mm256_andnot_si256(multi, any_h);
+
+            // --- DENSITY SUPPRESSION (3+ Neighbors) ---
+            __m256i three1 = _mm256_or_si256(_mm256_and_si256(_mm256_and_si256(uh, dh), _mm256_or_si256(lh, rh)), _mm256_and_si256(_mm256_and_si256(lh, rh), _mm256_or_si256(uh, dh)));
+            __m256i three2 = _mm256_or_si256(_mm256_and_si256(_mm256_and_si256(ulh, urh), _mm256_or_si256(dlh, drh)), _mm256_and_si256(_mm256_and_si256(dlh, drh), _mm256_or_si256(ulh, urh)));
+            __m256i suppress = _mm256_or_si256(_mm256_or_si256(three1, three2), _mm256_or_si256(_mm256_and_si256(multi1, any2), _mm256_and_si256(multi2, any1)));
+
             __m256i h = _mm256_and_si256(cur, m_h), low = _mm256_and_si256(cur, m_l), lah = _mm256_slli_epi16(low, 1), src = _mm256_and_si256(h, lah);
             __m256i nh = _mm256_andnot_si256(_mm256_or_si256(h, lah), ex1);
             nh = _mm256_or_si256(nh, src);
             __m256i nl = _mm256_srli_epi16(_mm256_andnot_si256(lah, h), 1);
             nl = _mm256_or_si256(nl, _mm256_srli_epi16(src, 1));
-            _mm256_store_si256((__m256i*)&result_buffer[i], _mm256_or_si256(nh, nl));
+            
+            // Apply suppression, but OR Source bits back in to ensure they are never killed
+            __m256i combined = _mm256_or_si256(nh, nl);
+            __m256i src_full = _mm256_or_si256(src, _mm256_srli_epi16(src, 1));
+            __m256i final_res = _mm256_or_si256(_mm256_andnot_si256(suppress, combined), src_full);
+            _mm256_store_si256((__m256i*)&result_buffer[i], final_res);
         }
     }
     for (int z = 0; z < map_height; ++z) {
         for (int x = 0; x < map_width; ++x) {
             int g_idx = z * map_width + x, r_idx = (z + 1) * SHADOW_WIDTH + (x + 1);
-            uint16_t res = result_buffer[r_idx]; grid[g_idx].imprint_field = res;
-            uint16_t h_b = res & 0xAAAA; uint8_t pm = 0;
-            for (int b=0; b<8; ++b) if (h_b & (2 << (b*2))) pm |= (1 << b);
-            grid[g_idx].ambient_mana |= (grid[g_idx].composition & pm);
+            uint16_t res = result_buffer[r_idx]; 
+            grid[g_idx].imprint_field = res;
+
+            // --- SCENT-TRIGGERED MANA REPLENISHMENT ---
+            uint8_t missing = grid[g_idx].composition & ~grid[g_idx].ambient_mana;
+            if (missing != 0) {
+                // Correctly map 16-bit imprint pulses back to 8-bit mana types
+                uint8_t pulse_mask = 0;
+                if (res & 0x0002) pulse_mask |= 0x01; if (res & 0x0008) pulse_mask |= 0x02;
+                if (res & 0x0020) pulse_mask |= 0x04; if (res & 0x0080) pulse_mask |= 0x08;
+                if (res & 0x0200) pulse_mask |= 0x10; if (res & 0x0800) pulse_mask |= 0x20;
+                if (res & 0x2000) pulse_mask |= 0x40; if (res & 0x8000) pulse_mask |= 0x80;
+
+                if (pulse_mask & missing) {
+                    uint8_t ticks = grid[g_idx].get_regrowth_ticks();
+
+                    ticks++;
+                    if (ticks >= 16) {
+                        grid[g_idx].ambient_mana = grid[g_idx].composition;
+                        ticks = 0;
+                    }
+                    grid[g_idx].set_regrowth_ticks(ticks);
+                }
+            }
         }
     }
+}
+
+int SimulationManager::get_tile_regrowth(int x, int z) const {
+    if (x >= 0 && x < map_width && z >= 0 && z < map_height) {
+        return grid[z * map_width + x].get_regrowth_ticks();
+    }
+    return 0;
 }
 
 void SimulationManager::_resolve_movement_and_clashes() {
@@ -405,7 +515,11 @@ void SimulationManager::_resolve_movement_and_clashes() {
 
 void SimulationManager::generate_new_world(int seed) {
     grid.assign(map_width * map_height, Tile{0, 0, 0, 0, 0, 0, 0, 0});
-    for (auto &tile : grid) tile.set_countdown(7);
+    for (auto &tile : grid) {
+        tile.set_countdown(7);
+        tile.ambient_mana = tile.composition;
+        tile.regrowth_data = 0;
+    }
     active_tiles.clear(); is_active_map.assign(map_width * map_height, 0);
     dirty_propagation_indices.clear(); is_dirty_map.assign(map_width * map_height, 0);
     propagation_buffer.assign(map_width * map_height, 0); step_count = 0;
@@ -464,9 +578,9 @@ void SimulationManager::clear_interaction_tables() {
     for (int i=0; i<64; ++i) propagation_rules[i] = PropagationRule();
     for (int b=0; b<256; ++b) for (int e=0; e<64; ++e) biome_transitions[b][e] = (uint8_t)b;
 }
-void SimulationManager::set_tile_composition(int x, int z, int c) { if (x >= 0 && x < map_width && z >= 0 && z < map_height) grid[z * map_width + x].composition = (uint8_t)c; }
+void SimulationManager::set_tile_composition(int x, int z, int c) { if (x >= 0 && x < map_width && z >= 0 && z < map_height) { int idx = z * map_width + x; grid[idx].composition = (uint8_t)c; grid[idx].ambient_mana = (uint8_t)c; grid[idx].regrowth_data = 0; } }
 int SimulationManager::get_tile_composition(int x, int z) const { return (x >= 0 && x < map_width && z >= 0 && z < map_height) ? (int)grid[z * map_width + x].composition : 0; }
-void SimulationManager::set_tile_mana(int x, int z, int m) { if (x >= 0 && x < map_width && z >= 0 && z < map_height) grid[z * map_width + x].ambient_mana = (uint8_t)m; }
+void SimulationManager::set_tile_mana(int x, int z, int m) { if (x >= 0 && x < map_width && z >= 0 && z < map_height) { int idx = z * map_width + x; grid[idx].ambient_mana = (uint8_t)m; grid[idx].regrowth_data = 0; } }
 int SimulationManager::get_tile_mana(int x, int z) const { return (x >= 0 && x < map_width && z >= 0 && z < map_height) ? (int)grid[z * map_width + x].ambient_mana : 0; }
 void SimulationManager::set_tile_effect(int x, int z, uint64_t e) { if (x >= 0 && x < map_width && z >= 0 && z < map_height) { int idx = z * map_width + x; grid[idx].effect_stack |= e; if (e & 0x00FFFFFFFFFFFFFFULL) grid[idx].set_countdown(7); _mark_tile_active(idx); } }
 uint64_t SimulationManager::get_tile_effects(int x, int z) const { return (x >= 0 && x < map_width && z >= 0 && z < map_height) ? grid[z * map_width + x].effect_stack : (uint64_t)0; }

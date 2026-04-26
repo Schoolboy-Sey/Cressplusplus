@@ -621,9 +621,10 @@
 			"carnivore": false,
 			"diet": 8,
 			"herbivore": true,
-			"mana": 8,
+			"mana": 1,
 			"name": "Slime",
 			"push": false,
+			"sated_duration": 255,
 			"species": 1,
 			"velocity": 0,
 			"weight": 2

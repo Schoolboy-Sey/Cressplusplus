@@ -75,6 +75,7 @@ private:
     uint8_t evolution_paths[256][8];
     uint8_t species_base_weight[256];
     int8_t  species_base_velocity[256];
+    uint8_t species_sated_duration[256];
 
     struct PropagationRule {
         bool active = false;
@@ -121,6 +122,8 @@ public:
     void load_state_snapshot();
     void process_ai_intents();
     void auto_update_scent();
+    void apply_scent_vacuum();
+    void clear_imprint_field();
     void run_scent_update(int x, int z);
     void update_scent(int x, int z);
 
@@ -128,6 +131,7 @@ public:
     int get_tile_composition(int x, int z) const;
     void set_tile_mana(int x, int z, int mask);
     int get_tile_mana(int x, int z) const;
+    int get_tile_regrowth(int x, int z) const;
     void set_tile_effect(int x, int z, uint64_t effect_bit);
     uint64_t get_tile_effects(int x, int z) const;
     void set_impassable(int x, int z, bool impassable);
@@ -148,6 +152,8 @@ public:
     void set_unit_flags(int entity_id, int flags);
     int get_unit_diet(int entity_id) const;
     void set_unit_diet(int entity_id, int diet);
+    void set_unit_species(int entity_id, int species);
+    int get_unit_species(int entity_id) const;
     int get_unit_sated_timer(int entity_id) const;
     Dictionary get_all_units() const;
 
@@ -163,6 +169,7 @@ public:
 
     void add_evolution_path(int current_species, int mana_bit, int result_species);
     void set_species_stats(int species_id, int weight, int velocity);
+    void set_species_sated_duration(int species_id, int duration);
 
     
     int get_map_width() const { return map_width; }

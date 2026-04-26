@@ -410,6 +410,16 @@ unique_name_in_owner = true
 layout_mode = 2
 max_value = 255.0
 
+[node name="LSated" type="Label" parent="VBox/MainArea/UnitsPanel/UnitEditor/Grid"]
+layout_mode = 2
+text = "Sated Duration (Turns):"
+
+[node name="UnitSatedInput" type="SpinBox" parent="VBox/MainArea/UnitsPanel/UnitEditor/Grid"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 255.0
+value = 10.0
+
 [node name="L4" type="Label" parent="VBox/MainArea/UnitsPanel/UnitEditor/Grid"]
 layout_mode = 2
 text = "Mana Alignment:"

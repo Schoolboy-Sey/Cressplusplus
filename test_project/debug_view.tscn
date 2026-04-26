@@ -158,6 +158,22 @@ layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.8, 0, 1)
 text = "EXECUTE TURN"
 
+[node name="HBoxMany" type="HBoxContainer" parent="CanvasLayer/Control/PlayHUD"]
+layout_mode = 2
+
+[node name="ManyTurnsInput" type="SpinBox" parent="CanvasLayer/Control/PlayHUD/HBoxMany"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 1000.0
+value = 10.0
+
+[node name="RunManyBtn" type="Button" parent="CanvasLayer/Control/PlayHUD/HBoxMany"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Run Turns"
+
 [node name="ExitPlayBtn" type="Button" parent="CanvasLayer/Control/PlayHUD"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -225,6 +241,7 @@ RMB: Set Player Pos"
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/ReloadDefBtn" to="." method="_on_load_definitions_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/Panel/VBoxContainer/PlayModeBtn" to="." method="_on_play_mode_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/PlayHUD/ExecuteTurnBtn" to="." method="_on_execute_turn_pressed"]
+[connection signal="pressed" from="CanvasLayer/Control/PlayHUD/HBoxMany/RunManyBtn" to="." method="_on_run_many_turns_pressed"]
 [connection signal="pressed" from="CanvasLayer/Control/PlayHUD/ExitPlayBtn" to="." method="_on_exit_play_pressed"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/ScentToggle" to="." method="_on_toggle_scent_toggled"]
 [connection signal="toggled" from="CanvasLayer/Control/Toggles/BiomeToggle" to="." method="_on_toggle_biome_toggled"]

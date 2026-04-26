@@ -2,6 +2,35 @@
 
 All notable changes to the Cress project will be documented in this file.
 
+## [2026-04-26] - Ecological Balancing & Refined Navigation
+### Added
+- **Scent-Triggered Mana Replenishment**: Implemented a slow, deterministic regrowth system.
+    - **4-Bit Tick Counter**: Added `regrowth_data` to the `Tile` struct to track recovery progress.
+    - **Pulsating Photosynthesis**: Tiles missing `ambient_mana` increment their counter when hit by a matching scent pulse from neighbors.
+    - **16-Pulse Restoration**: Ambient mana is fully restored only after receiving 16 matching pulses, creating a natural recovery wave across the map.
+- **Turn-Based Sated Timing**:
+    - **Ecological Duration**: Sated timers are now set in "Turns" (multiplied by 10 internally), allowing for long-term "Boom and Bust" cycles.
+    - **Fasting Enforcement**: Sated units now explicitly skip all eating checks, allowing biomes time to recover.
+- **Refined Navigation AI**:
+    - **Inertial Heading**: Units now remember their last movement direction, providing hysteresis to "punch through" signal noise or transient wave gaps.
+    - **Scent-Aware Inertia**: The +2 inertia bonus is now only applied when a unit detects a valid gradient, preventing aimless drifting in vacuums.
+    - **Randomized Tie-Breaking**: Neighbor search order is now shuffled per unit per step to prevent herd clumping and directional bias (fixing the "South migration" bug).
+- **Advanced Noise Management**:
+    - **3x3 Scent Vacuum**: Active units now clear a 3x3 area of their diet's scent bits at the start of every turn, preventing confusion from their own "wake."
+    - **SIMD Density Suppression**: Implemented a "Smother" rule in AVX2 where tiles with 3+ pulsing neighbors have their signal cleared to prevent solid signal blobs.
+    - **Source Protection**: Scent Sources (active mana) are explicitly exempt from density suppression to ensure food remains detectable.
+- **Debug Play HUD Expansion**:
+    - **Run Many Turns**: Added a UI control to execute up to 1000 turns at once for long-term ecological observation.
+    - **Unit Serialization**: Maps now save and load the full state of all units, including species, team, weight, velocity, and sated status.
+    - **Regrowth Inspector**: The Tile Inspector now displays real-time regrowth ticks (0/16).
+
+### Fixed
+- **Ghost Source Decay**: Fixed a bug where scent sources persisted for one turn after mana was eaten; sources now downgrade to pulses immediately.
+- **Replenishment Mapping**: Corrected a bitmask bug that caused regrowth to fail for mana types other than Bit 0.
+- **Species ID Handover**: Fixed a bug where newly spawned units ignored species-specific sated durations.
+- **Initial State Sync**: Ensured `ambient_mana` correctly matches `composition` on world startup and during manual editor "painting."
+- **8-Way SIMD Scent**: Expanded the AVX2 wave loop to process 8 neighbors (including diagonals), creating smoother, circular expansion fields.
+
 ## [2026-04-19] - Biological Engine & AVX2 "8-Step Symphony"
 ### Added
 - **AVX2 SIMD Biological CA**: Implemented a high-speed scent wave propagation system using 256-bit SIMD intrinsics.

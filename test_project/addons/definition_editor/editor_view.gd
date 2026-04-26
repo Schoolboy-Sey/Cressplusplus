@@ -268,6 +268,7 @@ func _on_unit_selected(index):
 	%UnitWeightInput.value = u.weight
 	%UnitVelInput.value = u.velocity
 	%UnitSpeciesInput.value = u.get("species", 0)
+	%UnitSatedInput.value = u.get("sated_duration", 10)
 	_set_checkbox_id(%UnitManaCheckboxes, int(u.get("mana", 0)))
 	_set_checkbox_id(%UnitDietCheckboxes, int(u.get("diet", 0)))
 	%UnitPushCheck.button_pressed = u.get("push", false)
@@ -280,6 +281,7 @@ func _on_add_unit_pressed():
 		"weight": int(%UnitWeightInput.value),
 		"velocity": int(%UnitVelInput.value),
 		"species": int(%UnitSpeciesInput.value),
+		"sated_duration": int(%UnitSatedInput.value),
 		"mana": _get_checkbox_id(%UnitManaCheckboxes),
 		"diet": _get_checkbox_id(%UnitDietCheckboxes),
 		"push": %UnitPushCheck.button_pressed,

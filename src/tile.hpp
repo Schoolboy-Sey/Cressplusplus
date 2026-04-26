@@ -24,7 +24,7 @@ struct Tile {
     uint64_t effect_stack;      // Bytes 5-12: Transient effects
     uint8_t ambient_mana;       // Byte 13: Available spellcasting fuel
     uint16_t imprint_field;     // Bytes 14-15: Scent Wave CA
-    uint8_t reserved_padding;   // Byte 16: L1 Cache alignment
+    uint8_t regrowth_data;      // Byte 16: Ticks for mana replenishment
 
     // Constants for pathing_scent
     static const uint8_t SCENT_MASK = 0x0F;
@@ -54,6 +54,14 @@ struct Tile {
 
     void set_countdown(uint8_t val) {
         effect_stack = (effect_stack & ~(0x7ULL << 56)) | (static_cast<uint64_t>(val & 0x7) << 56);
+    }
+
+    uint8_t get_regrowth_ticks() const {
+        return regrowth_data & 0x0F;
+    }
+
+    void set_regrowth_ticks(uint8_t val) {
+        regrowth_data = (regrowth_data & 0xF0) | (val & 0x0F);
     }
 };
 #pragma pack(pop)

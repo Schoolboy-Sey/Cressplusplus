@@ -44,10 +44,22 @@
 				Registers an evolution transition. If a unit of current_species eats a specific mana bit, it will evolve into the result_species.
 			</description>
 		</method>
+		<method name="apply_scent_vacuum">
+			<return type="void" />
+			<description>
+				Clears the scent field bits matching each active unit's diet in a 3x3 area around them. Used once per turn to manage signal noise.
+			</description>
+		</method>
 		<method name="auto_update_scent">
 			<return type="void" />
 			<description>
 				Automatically calculates the legacy smellnet BFS propagation using all active Player units (Team 0) as scent sources.
+			</description>
+		</method>
+		<method name="clear_imprint_field">
+			<return type="void" />
+			<description>
+				Wipes the entire biological wave CA field, resetting all Pulses and Trails to Empty.
 			</description>
 		</method>
 		<method name="clear_interaction_tables">
@@ -120,6 +132,14 @@
 				Returns the 8-bit ambient mana bitmask for the specified tile.
 			</description>
 		</method>
+		<method name="get_tile_regrowth" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="z" type="int" />
+			<description>
+				Returns the current 4-bit regrowth tick counter (0-15) for a tile.
+			</description>
+		</method>
 		<method name="get_unit_at" qualifiers="const">
 			<return type="int" />
 			<param index="0" name="x" type="int" />
@@ -161,6 +181,13 @@
 			<param index="0" name="entity_id" type="int" />
 			<description>
 				Returns the remaining steps for which the unit will remain sated (not eating).
+			</description>
+		</method>
+		<method name="get_unit_species" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="entity_id" type="int" />
+			<description>
+				Returns the species ID of the specified unit.
 			</description>
 		</method>
 		<method name="get_unit_team" qualifiers="const">
@@ -284,6 +311,14 @@
 				Sets the base physics stats for a specific species ID.
 			</description>
 		</method>
+		<method name="set_species_sated_duration">
+			<return type="void" />
+			<param index="0" name="species_id" type="int" />
+			<param index="1" name="duration" type="int" />
+			<description>
+				Sets the sated duration (in Turns) for a specific species. Input is multiplied by 10 internally to convert to steps.
+			</description>
+		</method>
 		<method name="set_tile_composition">
 			<return type="void" />
 			<param index="0" name="x" type="int" />
@@ -317,6 +352,14 @@
 			<param index="1" name="diet" type="int" />
 			<description>
 				Sets the mana diet requirements for a unit.
+			</description>
+		</method>
+		<method name="set_unit_species">
+			<return type="void" />
+			<param index="0" name="entity_id" type="int" />
+			<param index="1" name="species" type="int" />
+			<description>
+				Sets the species ID for a specific unit.
 			</description>
 		</method>
 		<method name="set_unit_flags">

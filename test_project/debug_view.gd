@@ -65,11 +65,20 @@ func _on_exit_play_pressed():
 	selected_unit_id = -1
 	_update_mode_ui()
 	queue_redraw()
-
 func _on_execute_turn_pressed():
-	for i in range(10): sim.run_step()
 	sim.auto_update_scent()
 	sim.process_ai_intents()
+	sim.apply_scent_vacuum()
+	for i in range(10): sim.run_step()
+	queue_redraw()
+
+func _on_run_many_turns_pressed():
+	var turns = int(%ManyTurnsInput.value)
+	for t in range(turns):
+		sim.auto_update_scent()
+		sim.process_ai_intents()
+		sim.apply_scent_vacuum()
+		for i in range(10): sim.run_step()
 	queue_redraw()
 
 func _setup_bit_checkboxes():
@@ -103,9 +112,12 @@ func _load_definitions():
 				if e.has("interval"): sim.set_propagation_interval(b_idx, int(e.interval))
 				if e.has("weight"): sim.set_effect_weight(b_idx, int(e.weight))
 			
-			%UnitSpawnDropdown.clear()
 			if definitions.has("units"):
-				for u in definitions.units: %UnitSpawnDropdown.add_item(u.name)
+				for u in definitions.units: 
+					%UnitSpawnDropdown.add_item(u.name)
+					var spec_id = int(u.get("species", 0))
+					sim.set_species_stats(spec_id, int(u.weight), int(u.velocity))
+					sim.set_species_sated_duration(spec_id, int(u.get("sated_duration", 10)))
 				
 			for i in definitions.interactions:
 				var bit_a = _get_effect_bit(i.a); var bit_b = _get_effect_bit(i.b)
@@ -137,6 +149,7 @@ func _on_spawn_unit_pressed():
 	
 	var id = sim.spawn_unit_full(selected_tile.x, selected_tile.y, team, u_def.weight, u_def.velocity, flags)
 	if id != -1:
+		sim.set_unit_species(id, int(u_def.get("species", 0)))
 		sim.set_unit_diet(id, int(u_def.get("diet", 0)))
 	queue_redraw()
 
@@ -263,7 +276,8 @@ func _on_save_map_as_pressed():
 			"weight": sim.get_unit_weight(id),
 			"velocity": sim.get_unit_velocity(id),
 			"flags": sim.get_unit_flags(id),
-			"diet": sim.get_unit_diet(id)
+			"diet": sim.get_unit_diet(id),
+			"species": sim.get_unit_species(id)
 		}
 		data.units.append(u_data)
 		
@@ -291,6 +305,7 @@ func _on_load_map_pressed():
 		for u in data.units:
 			var id = sim.spawn_unit_full(int(u.x), int(u.z), int(u.team), int(u.weight), int(u.velocity), int(u.flags))
 			if id != -1:
+				sim.set_unit_species(id, int(u.get("species", 0)))
 				sim.set_unit_diet(id, int(u.get("diet", 0)))
 	
 	sim.auto_update_scent()
@@ -337,7 +352,8 @@ func _draw():
 		draw_rect(Rect2(selected_tile.x * tile_size, selected_tile.y * tile_size, tile_size, tile_size), Color.WHITE, false, 1.0)
 		var comp = sim.get_tile_composition(selected_tile.x, selected_tile.y)
 		var mana = sim.get_tile_mana(selected_tile.x, selected_tile.y)
-		var info_str = "Tile (%d, %d)\nID: %d (%s)\nMana: %d" % [selected_tile.x, selected_tile.y, comp, biome_names.get(comp, "Unknown"), mana]
+		var regrowth = sim.get_tile_regrowth(selected_tile.x, selected_tile.y)
+		var info_str = "Tile (%d, %d)\nID: %d (%s)\nMana: %d\nRegrowth: %d/16" % [selected_tile.x, selected_tile.y, comp, biome_names.get(comp, "Unknown"), mana, regrowth]
 		var info_pos = Vector2(selected_tile.x + 1, selected_tile.y) * tile_size + Vector2(5, 0)
 		if info_pos.x > sim.map_width * tile_size - 100: info_pos.x -= 150
 		draw_string($CanvasLayer/Control.get_theme_default_font(), info_pos, info_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.YELLOW)
