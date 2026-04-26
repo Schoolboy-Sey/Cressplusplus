@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <class name="SimulationManager" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
 	<brief_description>
-		Manages the 16-byte bitwise grid simulation, including scent propagation, the Branchless ALU, and the Pooled ECS.
+		Manages the 16-byte bitwise grid simulation, including scent waves, branchless evolution, and AVX2-accelerated biological CA.
 	</brief_description>
 	<description>
-		The SimulationManager is the primary GDExtension bridge between Godot and the C++ simulation engine. It handles the lifetime of the grid memory, the execution of the "Smellnet" AI pathfinding, the Branchless ALU for complex elemental interactions, and a Pooled Structure of Arrays (SoA) for unit management and deterministic combat.
+		The SimulationManager is the primary GDExtension bridge between Godot and the C++ simulation engine. It handles the lifetime of the grid memory, the execution of the "8-Step Symphony" execution pipeline, and a Pooled Structure of Arrays (SoA) for unit management and deterministic combat. It features AVX2 SIMD biological scent propagation and branchless bitwise evolution.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -32,19 +32,28 @@
 			<param index="1" name="bit_b" type="int" />
 			<param index="2" name="result_stack" type="int" />
 			<description>
-				Registers a chemical combination rule. If Bit A and Bit B are present, they are consumed to create the resulting effect stack (which can contain one or more bits).
+				Registers a chemical combination rule. If Bit A and Bit B are present, they are consumed to create the resulting effect stack.
+			</description>
+		</method>
+		<method name="add_evolution_path">
+			<return type="void" />
+			<param index="0" name="current_species" type="int" />
+			<param index="1" name="mana_bit" type="int" />
+			<param index="2" name="result_species" type="int" />
+			<description>
+				Registers an evolution transition. If a unit of current_species eats a specific mana bit, it will evolve into the result_species.
 			</description>
 		</method>
 		<method name="auto_update_scent">
 			<return type="void" />
 			<description>
-				Automatically calculates the smellnet BFS propagation using all active Player units (Team 0) as scent sources.
+				Automatically calculates the legacy smellnet BFS propagation using all active Player units (Team 0) as scent sources.
 			</description>
 		</method>
 		<method name="clear_interaction_tables">
 			<return type="void" />
 			<description>
-				Wipes all annihilation, chemistry, and biome transition rules from the LUTs. Useful for re-loading definitions from JSON.
+				Wipes all interaction and evolution LUTs. Useful for re-loading definitions from JSON.
 			</description>
 		</method>
 		<method name="despawn_unit">
@@ -70,7 +79,7 @@
 		<method name="get_grid_data" qualifiers="const">
 			<return type="PackedByteArray" />
 			<description>
-				Returns the raw 1D array of 16-byte tiles as a PackedByteArray, suitable for passing to Vulkan Storage Buffers in Godot shaders.
+				Returns the raw 1D array of 16-byte tiles as a PackedByteArray, suitable for high-speed shader processing.
 			</description>
 		</method>
 		<method name="get_scent" qualifiers="const">
@@ -78,13 +87,13 @@
 			<param index="0" name="x" type="int" />
 			<param index="1" name="z" type="int" />
 			<description>
-				Returns the 4-bit scent value (0-15) for the specified coordinate.
+				Returns the legacy 4-bit scent value for the specified coordinate.
 			</description>
 		</method>
 		<method name="get_scent_map_string" qualifiers="const">
 			<return type="String" />
 			<description>
-				Returns an ASCII representation of the current scent grid for debugging purposes.
+				Returns an ASCII representation of the legacy scent grid for debugging.
 			</description>
 		</method>
 		<method name="get_tile_composition" qualifiers="const">
@@ -103,12 +112,34 @@
 				Returns the current 64-bit effect stack for the specified tile.
 			</description>
 		</method>
+		<method name="get_tile_mana" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="z" type="int" />
+			<description>
+				Returns the 8-bit ambient mana bitmask for the specified tile.
+			</description>
+		</method>
 		<method name="get_unit_at" qualifiers="const">
 			<return type="int" />
 			<param index="0" name="x" type="int" />
 			<param index="1" name="z" type="int" />
 			<description>
 				Returns the entity ID located at the specified grid coordinate, or -1 if empty.
+			</description>
+		</method>
+		<method name="get_unit_diet" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="entity_id" type="int" />
+			<description>
+				Returns the 8-bit mana bitmask representing the unit's required diet.
+			</description>
+		</method>
+		<method name="get_unit_flags" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="entity_id" type="int" />
+			<description>
+				Returns the bitmask of EntityFlags (e.g., PUSH, HERBIVORE) for the specified unit.
 			</description>
 		</method>
 		<method name="get_unit_intent_pos" qualifiers="const">
@@ -125,25 +156,32 @@
 				Returns the current grid position of the specified unit.
 			</description>
 		</method>
+		<method name="get_unit_sated_timer" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="entity_id" type="int" />
+			<description>
+				Returns the remaining steps for which the unit will remain sated (not eating).
+			</description>
+		</method>
 		<method name="get_unit_team" qualifiers="const">
 			<return type="int" />
 			<param index="0" name="entity_id" type="int" />
 			<description>
-				Returns the team ID for the specified unit (0=Ally, 1=Enemy).
+				Returns the team ID for the specified unit.
 			</description>
 		</method>
 		<method name="get_unit_velocity" qualifiers="const">
 			<return type="int" />
 			<param index="0" name="entity_id" type="int" />
 			<description>
-				Returns the current velocity (movement speed) for the specified unit.
+				Returns the current movement speed for the specified unit.
 			</description>
 		</method>
 		<method name="get_unit_weight" qualifiers="const">
 			<return type="int" />
 			<param index="0" name="entity_id" type="int" />
 			<description>
-				Returns the base weight (mass) for the specified unit.
+				Returns the base mass for the specified unit.
 			</description>
 		</method>
 		<method name="is_impassable" qualifiers="const">
@@ -151,13 +189,13 @@
 			<param index="0" name="x" type="int" />
 			<param index="1" name="z" type="int" />
 			<description>
-				Returns true if the tile is flagged as impassable for scent propagation and unit movement.
+				Returns true if the tile is flagged as impassable for movement.
 			</description>
 		</method>
 		<method name="load_state_snapshot">
 			<return type="void" />
 			<description>
-				Instantly restores the simulation state (Grid and Units) from the last saved snapshot.
+				Restores the simulation state from the last saved snapshot.
 			</description>
 		</method>
 		<method name="move_unit_intent">
@@ -166,33 +204,41 @@
 			<param index="1" name="target_x" type="int" />
 			<param index="2" name="target_z" type="int" />
 			<description>
-				Sets a unit's movement plan for the next turn execution.
+				Sets a unit's movement plan for the next sub-step execution.
 			</description>
 		</method>
 		<method name="process_ai_intents">
 			<return type="void" />
 			<description>
-				Commands all active Enemy units to calculate movement intents based on the current smellnet scent trail.
-			</description>
-		</method>
-		<method name="run_scent_update">
-			<return type="void" />
-			<param index="0" name="player_x" type="int" />
-			<param index="1" name="player_z" type="int" />
-			<description>
-				Executes the BFS scent propagation algorithm from a manual coordinate.
+				Commands all active AI units to calculate plans based on scent waves and hunting logic.
 			</description>
 		</method>
 		<method name="run_step">
 			<return type="void" />
 			<description>
-				Executes one discrete simulation step, processing Movement, The Clash, Grid ALU, and Propagation.
+				Executes one discrete simulation step of the 8-Step Symphony pipeline.
 			</description>
 		</method>
 		<method name="save_state_snapshot">
 			<return type="void" />
 			<description>
-				Captures a raw binary snapshot of the entire world state for later restoration.
+				Captures a raw binary snapshot of the world state.
+			</description>
+		</method>
+		<method name="set_biome_weight">
+			<return type="void" />
+			<param index="0" name="biome_id" type="int" />
+			<param index="1" name="weight" type="int" />
+			<description>
+				Sets the impact resistance weight for a specific biome.
+			</description>
+		</method>
+		<method name="set_effect_weight">
+			<return type="void" />
+			<param index="0" name="bit_index" type="int" />
+			<param index="1" name="weight" type="int" />
+			<description>
+				Sets the mass modifier for a specific effect bit.
 			</description>
 		</method>
 		<method name="set_flammable">
@@ -200,7 +246,7 @@
 			<param index="0" name="biome_id" type="int" />
 			<param index="1" name="flammable" type="bool" />
 			<description>
-				Configures whether a specific biome ID is considered flammable for the propagation engine.
+				Configures flammability for a specific biome.
 			</description>
 		</method>
 		<method name="set_impassable">
@@ -209,7 +255,7 @@
 			<param index="1" name="z" type="int" />
 			<param index="2" name="impassable" type="bool" />
 			<description>
-				Sets or clears the impassable flag for the specified tile.
+				Sets or clears the impassable flag.
 			</description>
 		</method>
 		<method name="set_propagation_interval">
@@ -217,7 +263,7 @@
 			<param index="0" name="bit_index" type="int" />
 			<param index="1" name="interval" type="int" />
 			<description>
-				Sets the simulation step interval for a specific effect bit (e.g., Fire spreads every 4 steps).
+				Sets the spread speed for an effect bit.
 			</description>
 		</method>
 		<method name="set_propagation_rule">
@@ -226,7 +272,16 @@
 			<param index="1" name="check_flammable" type="bool" />
 			<param index="2" name="check_elevation" type="bool" />
 			<description>
-				Configures the propagation behavior for a specific effect bit.
+				Configures spread constraints for an effect bit.
+			</description>
+		</method>
+		<method name="set_species_stats">
+			<return type="void" />
+			<param index="0" name="species_id" type="int" />
+			<param index="1" name="weight" type="int" />
+			<param index="2" name="velocity" type="int" />
+			<description>
+				Sets the base physics stats for a specific species ID.
 			</description>
 		</method>
 		<method name="set_tile_composition">
@@ -235,7 +290,7 @@
 			<param index="1" name="z" type="int" />
 			<param index="2" name="composition" type="int" />
 			<description>
-				Manually sets the composition (biome ID) for a specific tile.
+				Sets the biome ID for a tile.
 			</description>
 		</method>
 		<method name="set_tile_effect">
@@ -244,7 +299,32 @@
 			<param index="1" name="z" type="int" />
 			<param index="2" name="effect_bit" type="int" />
 			<description>
-				Injects an effect bit into the specified tile's effect stack.
+				Injects an effect bit into a tile.
+			</description>
+		</method>
+		<method name="set_tile_mana">
+			<return type="void" />
+			<param index="0" name="x" type="int" />
+			<param index="1" name="z" type="int" />
+			<param index="2" name="mask" type="int" />
+			<description>
+				Sets the transient ambient mana bitmask for a tile.
+			</description>
+		</method>
+		<method name="set_unit_diet">
+			<return type="void" />
+			<param index="0" name="entity_id" type="int" />
+			<param index="1" name="diet" type="int" />
+			<description>
+				Sets the mana diet requirements for a unit.
+			</description>
+		</method>
+		<method name="set_unit_flags">
+			<return type="void" />
+			<param index="0" name="entity_id" type="int" />
+			<param index="1" name="flags" type="int" />
+			<description>
+				Sets special ability flags for a unit.
 			</description>
 		</method>
 		<method name="spawn_unit">
@@ -254,7 +334,7 @@
 			<param index="2" name="team" type="int" />
 			<param index="3" name="weight" type="int" />
 			<description>
-				Spawns a unit with default velocity into the grid.
+				Spawns a unit with default stats.
 			</description>
 		</method>
 		<method name="spawn_unit_full">
@@ -264,8 +344,9 @@
 			<param index="2" name="team" type="int" />
 			<param index="3" name="weight" type="int" />
 			<param index="4" name="velocity" type="int" />
+			<param index="5" name="flags" type="int" default="0" />
 			<description>
-				Spawns a unit with specific stats into the grid.
+				Spawns a unit with specific physics stats and ability flags.
 			</description>
 		</method>
 	</methods>
@@ -277,4 +358,21 @@
 			The horizontal width of the grid in tiles.
 		</member>
 	</members>
+	<constants>
+		<constant name="FLAG_BOUNCE" value="1" enum="EntityFlags">
+			Unit returns to origin after a failed clash.
+		</constant>
+		<constant name="FLAG_PUSH" value="2" enum="EntityFlags">
+			Unit pushes defenders on a failed weight check.
+		</constant>
+		<constant name="FLAG_FLYING" value="4" enum="EntityFlags">
+			Unit ignores impassable terrain.
+		</constant>
+		<constant name="FLAG_HERBIVORE" value="8" enum="EntityFlags">
+			Unit uses biological scent waves for navigation.
+		</constant>
+		<constant name="FLAG_CARNIVORE" value="16" enum="EntityFlags">
+			Unit hunts other entities directly.
+		</constant>
+	</constants>
 </class>

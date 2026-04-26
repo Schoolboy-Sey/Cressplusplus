@@ -2,6 +2,34 @@
 
 All notable changes to the Cress project will be documented in this file.
 
+## [2026-04-19] - Biological Engine & AVX2 "8-Step Symphony"
+### Added
+- **AVX2 SIMD Biological CA**: Implemented a high-speed scent wave propagation system using 256-bit SIMD intrinsics.
+    - **Exactly One Neighbor Rule**: Implemented bitwise logic to ensure waves fracture and self-annihilate upon collision, preventing "solid wavefronts."
+    - **Wave-Based Recharge**: Scent pulses now physically transport mana; passing pulses recharge `ambient_mana` on tiles matching the biome identity.
+    - **4-State CA**: Implemented the full Source -> Pulse -> Trail -> Empty state machine within the SIMD block.
+- **Branchless Evolution & Mutation (Step 6)**: Implemented the "Identity Theft" biological reaction.
+    - **Evolution Matrix**: Added `evolution_paths[256][8]` LUT to handle species transformations without `if/else` logic.
+    - **Bitwise Masking**: Used "All-or-Nothing" masks to swap species identities and physics stats in a single CPU operation during feeding.
+    - **Mutation Tracking**: Consumed mana bits are added to the `entity_mutation` stack, automatically tiering units up via hardware `popcount`.
+- **Phase Alignment AI ($O(1)$ Navigation)**:
+    - **Intersection Tracking**: Herbivores now use a 16-bit `diet_mask` to detect wave intersections in a single memory load.
+    - **Ride vs. Surf**: Units now correctly navigate "Upstream" toward food sources when hungry and "Surf" away when sated.
+- **Hardware-Optimized execution (The 8-Step Symphony)**:
+    - **Pipeline Re-ordering**: Refactored `run_step()` to follow the strict TDD pipeline (Replenishment -> Movement -> Biological Wave -> Chemistry -> Feeding -> World Mutation).
+    - **Occupancy Grid v2**: Switched to `uint16_t` with an `EMPTY_TILE` (65535) sentinel for faster memory access.
+    - **Sparse Looping**: Replaced $O(N)$ full-array scans with a dense `active_entity_indices` list to bypass empty ECS slots.
+- **Improved Debug Tools**:
+    - **Tile Inspector**: Added a real-time popup to view Tile ID, Composition, and Ambient Mana levels.
+    - **Unit Status Overlays**: Added visual indicators for "Sated" (stomach bar) and "Eating" (green arc animation).
+    - **Named Waves**: The wave selector now uses mana names (Fire, Water, etc.) instead of IDs for better clarity.
+
+### Fixed
+- **Memory Traps**: Eliminated `std::vector<bool>` bit-shifting traps by converting status maps to `uint8_t`.
+- **L1 Cache Alignment**: Added `alignas(32)` and 48-tile horizontal padding to shadow buffers to guarantee perfect SIMD memory streaming.
+- **Zero Allocation**: Moved wavefront queues to pre-allocated class-level buffers to prevent OS memory requests during the physics loop.
+- **Scent Persistence**: Resolved a bug where scent pulses were too transient for AI tracking by implementing Compass Heading memory in the ECS.
+
 ## [2026-04-15] - Initial GDExtension Architecture & Smellnet
 ### Added
 - **Tile Structure (`src/tile.hpp`)**: Implemented the core 16-byte deterministic bitwise grid unit as specified in the TDD.

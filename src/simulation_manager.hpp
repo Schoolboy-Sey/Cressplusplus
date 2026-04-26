@@ -33,7 +33,9 @@ private:
     std::vector<uint32_t> entity_coordinate;
     std::vector<uint32_t> entity_intent;
     std::vector<uint32_t> entity_flags;
+    std::vector<uint16_t> entity_diet_mask;
     std::vector<uint8_t>  entity_base_weight;
+    std::vector<uint8_t>  entity_species;
     std::vector<uint8_t>  entity_diet;
     std::vector<uint8_t>  entity_mutation;
     std::vector<uint8_t>  entity_tier;
@@ -41,20 +43,20 @@ private:
     std::vector<uint8_t>  entity_sated_timer;
     std::vector<int8_t>   entity_velocity;
     std::vector<uint8_t>  entity_team;
-    std::vector<uint8_t>  entity_active; // Changed from bool
+    std::vector<uint8_t>  entity_active;
     
     std::vector<int>      available_entities;
-    std::vector<uint16_t> unit_grid; // Changed from int
+    std::vector<uint16_t> active_entity_indices;
+    std::vector<uint16_t> unit_grid;
 
     std::vector<Tile>     snapshot_grid;
     std::vector<uint32_t> snapshot_entity_coordinate;
     std::vector<uint32_t> snapshot_entity_intent;
     std::vector<uint32_t> snapshot_entity_flags;
     std::vector<uint8_t>  snapshot_entity_base_weight;
-    std::vector<int8_t>   snapshot_entity_velocity;
-    std::vector<uint8_t>  snapshot_entity_team;
-    std::vector<uint8_t>  snapshot_entity_active; // Changed from bool
-    std::vector<uint16_t> snapshot_unit_grid; // Changed from int
+    std::vector<uint8_t>  snapshot_entity_species;
+    std::vector<uint8_t>  snapshot_entity_active;
+    std::vector<uint16_t> snapshot_unit_grid;
 
     int map_width = 32;
     int map_height = 32;
@@ -69,6 +71,10 @@ private:
     uint8_t biome_transitions[256][64];
     uint8_t biome_weights[256];
     int8_t  effect_weights[64];
+
+    uint8_t evolution_paths[256][8];
+    uint8_t species_base_weight[256];
+    int8_t  species_base_velocity[256];
 
     struct PropagationRule {
         bool active = false;
@@ -140,6 +146,7 @@ public:
     void set_unit_flags(int entity_id, int flags);
     int get_unit_diet(int entity_id) const;
     void set_unit_diet(int entity_id, int diet);
+    int get_unit_sated_timer(int entity_id) const;
     Dictionary get_all_units() const;
 
     void clear_interaction_tables();
@@ -151,6 +158,9 @@ public:
     void set_effect_weight(int bit_index, int weight);
     void set_propagation_rule(int bit_index, bool check_flammable, bool check_elevation);
     void set_propagation_interval(int bit_index, int interval);
+
+    void add_evolution_path(int current_species, int mana_bit, int result_species);
+    void set_species_stats(int species_id, int weight, int velocity);
 
     
     int get_map_width() const { return map_width; }

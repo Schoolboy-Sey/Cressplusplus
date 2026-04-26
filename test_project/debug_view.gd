@@ -73,9 +73,8 @@ func _on_execute_turn_pressed():
 	queue_redraw()
 
 func _setup_bit_checkboxes():
-	var names = ["W (1)", "F (2)", "E (4)", "Pl (8)", "Pu (16)", "R (32)", "Mi (64)", "Ma (128)"]
 	for i in range(8):
-		var cb = CheckBox.new(); cb.text = names[i]
+		var cb = CheckBox.new(); cb.text = mana_names[i]
 		cb.toggled.connect(_on_bit_toggled.bind(1 << i))
 		bit_container.add_child(cb)
 
@@ -171,25 +170,19 @@ func _input(event):
 			if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 				if _is_valid_pos(grid_pos):
 					var uid_at_click = sim.get_unit_at(grid_pos.x, grid_pos.y)
-					# 1. ATTACK logic: If clicking an enemy while having an ally selected
 					if selected_unit_id != -1 and sim.get_unit_team(selected_unit_id) == 0:
 						if uid_at_click != -1 and sim.get_unit_team(uid_at_click) == 1:
 							var u_pos = sim.get_unit_pos(selected_unit_id)
 							if (abs(grid_pos.x - u_pos.x) + abs(grid_pos.y - u_pos.y)) <= sim.get_unit_velocity(selected_unit_id):
 								sim.move_unit_intent(selected_unit_id, grid_pos.x, grid_pos.y)
 								sim.auto_update_scent(); sim.process_ai_intents(); queue_redraw(); return
-
-					# 2. SELECT logic
-					if uid_at_click != -1:
-						selected_unit_id = uid_at_click; selected_tile = grid_pos; queue_redraw()
-					# 3. MOVE logic
+					if uid_at_click != -1: selected_unit_id = uid_at_click; selected_tile = grid_pos; queue_redraw()
 					elif selected_unit_id != -1 and sim.get_unit_team(selected_unit_id) == 0:
 						var u_pos = sim.get_unit_pos(selected_unit_id)
 						if (abs(grid_pos.x - u_pos.x) + abs(grid_pos.y - u_pos.y)) <= sim.get_unit_velocity(selected_unit_id):
 							sim.move_unit_intent(selected_unit_id, grid_pos.x, grid_pos.y)
 							selected_tile = grid_pos; sim.auto_update_scent(); sim.process_ai_intents(); queue_redraw()
-					else:
-						selected_tile = grid_pos; selected_unit_id = -1; queue_redraw()
+					else: selected_tile = grid_pos; selected_unit_id = -1; queue_redraw()
 
 	elif event is InputEventMouseMotion and is_painting and current_mode == MODE.EDIT:
 		var grid_pos = Vector2i(event.position / tile_size)
@@ -270,30 +263,17 @@ func _draw():
 	
 	for z in range(height):
 		for x in range(width):
-			var idx = z * width + x
-			var tile_offset = idx * 16
-			var rect = Rect2(x * tile_size, z * tile_size, tile_size, tile_size)
-			
-			if show_biome: 
-				var comp = grid_data[tile_offset]
-				draw_rect(rect, _get_biome_color(comp))
-			else: 
-				draw_rect(rect, Color.DARK_GRAY, false)
-				
-			if show_impassable:
-				var pathing = grid_data[tile_offset + 3]
-				if pathing & 0x20: # FLAG_IMPASSABLE
-					draw_rect(rect.grow(-2), Color.BLACK, false, 2.0)
+			var idx = z * width + x; var tile_offset = idx * 16; var rect = Rect2(x * tile_size, z * tile_size, tile_size, tile_size)
+			if show_biome: draw_rect(rect, _get_biome_color(grid_data[tile_offset]))
+			else: draw_rect(rect, Color.DARK_GRAY, false)
+			if show_impassable and (grid_data[tile_offset + 3] & 0x20): draw_rect(rect.grow(-2), Color.BLACK, false, 2.0)
 			
 			if %WaveToggle.button_pressed:
 				var imprint = grid_data.decode_u16(tile_offset + 13)
 				var state = (imprint >> (wave_bit * 2)) & 3
-				if state == 3: # SOURCE
-					draw_circle(rect.get_center(), tile_size * 0.4, Color.GOLD)
-				elif state == 2: # PULSE
-					draw_circle(rect.get_center(), tile_size * 0.3, Color.CYAN)
-				elif state == 1: # TRAIL
-					draw_circle(rect.get_center(), tile_size * 0.2, Color(0.2, 0.5, 1, 0.5))
+				if state == 3: draw_circle(rect.get_center(), tile_size * 0.4, Color.GOLD)
+				elif state == 2: draw_circle(rect.get_center(), tile_size * 0.3, Color.CYAN)
+				elif state == 1: draw_circle(rect.get_center(), tile_size * 0.2, Color(0.2, 0.5, 1, 0.5))
 
 			var effects = grid_data.decode_u64(tile_offset + 4)
 			if effects != 0:
@@ -301,26 +281,36 @@ func _draw():
 				for i in range(16): if effects & (1 << i): count += 1
 				for i in range(16):
 					if effects & (1 << i):
-						var ball_pos = center
-						if count > 1: ball_pos += Vector2(cos(angle), sin(angle)) * 5.0; angle += (2.0 * PI) / count
-						draw_circle(ball_pos, 3, _get_mana_color(1 << i))
+						var bp = center; if count > 1: bp += Vector2(cos(angle), sin(angle)) * 5.0; angle += (2.0 * PI) / count
+						draw_circle(bp, 3, _get_mana_color(1 << i))
 			if show_scent:
-				var pathing = grid_data[tile_offset + 3]
-				var scent = pathing & 0x0F
-				if scent > 0:
-					draw_rect(rect, Color(0.8, 0, 0.8, 0.2))
-					draw_string($CanvasLayer/Control.get_theme_default_font(), rect.position + Vector2(2, 14), str(scent), HORIZONTAL_ALIGNMENT_LEFT, -1, 10)
+				var scent = grid_data[tile_offset + 3] & 0x0F
+				if scent > 0: draw_rect(rect, Color(0.8, 0, 0.8, 0.2)); draw_string($CanvasLayer/Control.get_theme_default_font(), rect.position + Vector2(2, 14), str(scent), HORIZONTAL_ALIGNMENT_LEFT, -1, 10)
 			draw_rect(rect, Color(0.2, 0.2, 0.2, 0.5), false)
 	_draw_unit_intents(); _draw_units()
-	if selected_tile.x != -1: draw_rect(Rect2(selected_tile.x * tile_size, selected_tile.y * tile_size, tile_size, tile_size), Color.WHITE, false, 1.0)
+	if selected_tile.x != -1:
+		draw_rect(Rect2(selected_tile.x * tile_size, selected_tile.y * tile_size, tile_size, tile_size), Color.WHITE, false, 1.0)
+		var comp = sim.get_tile_composition(selected_tile.x, selected_tile.y)
+		var mana = sim.get_tile_mana(selected_tile.x, selected_tile.y)
+		var info_str = "Tile (%d, %d)\nID: %d (%s)\nMana: %d" % [selected_tile.x, selected_tile.y, comp, biome_names.get(comp, "Unknown"), mana]
+		var info_pos = Vector2(selected_tile.x + 1, selected_tile.y) * tile_size + Vector2(5, 0)
+		if info_pos.x > sim.map_width * tile_size - 100: info_pos.x -= 150
+		draw_string($CanvasLayer/Control.get_theme_default_font(), info_pos, info_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.YELLOW)
 
 func _draw_units():
 	var units = sim.get_all_units()
-	for uid in units:
-		var pos = units[uid]; var team = sim.get_unit_team(uid)
-		var rect = Rect2(pos.x * tile_size + 4, pos.y * tile_size + 4, tile_size - 8, tile_size - 8)
-		var color = Color.CYAN if team == 0 else Color.ORANGE_RED
-		draw_rect(rect, color); draw_string($CanvasLayer/Control.get_theme_default_font(), rect.position + Vector2(2, 10), str(sim.get_unit_weight(uid)), HORIZONTAL_ALIGNMENT_LEFT, -1, 8)
+	for id in units:
+		var pos = units[id]; var screen_pos = Vector2(pos.x, pos.y) * tile_size + Vector2(tile_size, tile_size) / 2
+		var team = sim.get_unit_team(id); var color = Color.GREEN if team == 0 else Color.RED
+		draw_circle(screen_pos, tile_size * 0.4, color)
+		var sated_time = sim.get_unit_sated_timer(id)
+		if sated_time > 0:
+			var bar_w = tile_size * 0.8 * (float(sated_time) / 10.0)
+			draw_rect(Rect2(screen_pos + Vector2(-tile_size*0.4, tile_size*0.3), Vector2(bar_w, 3)), Color.SADDLE_BROWN)
+		var intent = sim.get_unit_intent_pos(id)
+		if intent == pos:
+			var diet = sim.get_unit_diet(id); var mana = sim.get_tile_mana(pos.x, pos.y); var composition = sim.get_tile_composition(pos.x, pos.y)
+			if (mana | composition) & diet: draw_arc(screen_pos, tile_size * 0.5, 0, PI*2, 8, Color.LIME_GREEN, 2.0)
 
 func _draw_unit_intents():
 	var units = sim.get_all_units()
